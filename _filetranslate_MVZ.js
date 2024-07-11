@@ -37,11 +37,12 @@
  */
 
 (() => {
-'use strict';
+"use strict";
 
 const PLUGIN_NAME = "_filetranslate_MV";
+const MV_MODE = (Utils.RPGMAKER_NAME === "MV");
 
-const fs = require('fs');
+const fs = require("fs");
 const getBoolean = (str) => { str !== '' && str.match(/(?:true|y(?:es)?)/i) };
 
 //----------------------------------
@@ -99,8 +100,8 @@ const setObjDataOnBasicDatabase = ((data, dataTranslation) => {
 	//data?.forEach((obj) => { // we'll need Chromium 90+ for this
 	data.forEach((obj) => {
 		//It's necessary to generate metadata if including `note`
-		['name', 'nickname', 'profile', 'note', 'description',
-			'message1', 'message2', 'message3', 'message4'
+		["name", "nickname", "profile", "note", "description",
+			"message1", "message2", "message3", "message4"
 		].forEach((property) => {
 			setObjData(obj, property, dataTranslation);
 		});
@@ -110,10 +111,11 @@ const setObjDataOnBasicDatabase = ((data, dataTranslation) => {
 const setObjDataOnSystem = ((data, dataTranslation) => {
 	if (!data || !dataTranslation) return;
 	//setObjData(data, "gameTitle", dataTranslation);
-	['armorTypes', 'elements', 'equipTypes', 'skillTypes', 'weaponTypes'].forEach((property) => {
+	["armorTypes", "elements", "equipTypes", "skillTypes", "weaponTypes"
+	].forEach((property) => {
 		setArrayData(data[property], dataTranslation);
 	});
-	['basic', 'commands', 'params'].forEach((property) => {
+	["basic", "commands", "params"].forEach((property) => {
 		setArrayData(data.terms[property], dataTranslation);
 	});
 	Object.keys(data.terms.messages).forEach((key) => {
@@ -212,21 +214,25 @@ const setEventList = (eventList, attributesTranslation, stringsTranslation) => {
 				if (pushFirst) pushFirst = false;
 			}
 
+			if (!codedTexts.length) return;
+
 			const translateLines = (translations, is_list) => {
 				translations.forEach((text, i) => {
 					if (i < codedTexts.length) {
-						eventList[_index + i].parameters[0] = is_list ? text[1] : text; // NOTE: not for some strange 401's with >1 params
+						// NOTE: not for some strange 401's with >1 params
+						eventList[_index + i].parameters[0] = is_list ? text[1] : text;
 					} else {
 						if (separateBy && i % separateBy === 0) {
 							eventList.splice(_index + i, 0, separatorRpgCode(prev_indent, prev_params));
 							_index++;
 						}
-						eventList.splice(_index + i, 0, rpgCode(eventCode, prev_indent, [is_list ? text[1] : text]));
+						eventList.splice(_index + i, 0,
+							rpgCode(eventCode, prev_indent, [is_list ? text[1] : text]));
 					}
 				});
 			}
 
-			const combinedText = codedTexts.join("\n");
+			const combinedText = codedTexts.join('\n');
 			if (combinedText === '') {
 				_index += count - 1;
 				return;
@@ -241,7 +247,7 @@ const setEventList = (eventList, attributesTranslation, stringsTranslation) => {
 				for (let i = 0; i < stringsTranslation.length; i++) {
 					let match = true;
 					for (let j = 0; j < codedTexts.length; j++) {
-						if (stringsTranslation[i + j][0] !== codedTexts[j]) {
+						if (i + j > stringsTranslation.length - 1 || stringsTranslation[i + j][0] !== codedTexts[j]) {
 							match = false;
 							break;
 						}
@@ -288,8 +294,8 @@ const setEventList = (eventList, attributesTranslation, stringsTranslation) => {
 				break;
 			case 108: // Comment
 				if (!IGNORE_RARE) {
-					processTextEvent(408, (event) => event.parameters[0],
-						6, (indent, text) => rpgCode(108, indent, [text]), true);
+					processTextEvent(408, (event) => event.parameters[0], 6,
+						(indent, text) => rpgCode(108, indent, [text]), true);
 				}
 				break;
 			case 408: // Multi-line Comment
@@ -314,21 +320,41 @@ const setEventList = (eventList, attributesTranslation, stringsTranslation) => {
 				break;
 			case 655: // Multi-line script
 				break;
-			case 356: // Plugin
+			case 356: // Plugin Command
 				if (!IGNORE_RARE) {
 					const splitParams = parameters[0].split(' ');
 					for (const param of splitParams) {
 						if (attributesTranslation && param in attributesTranslation && attributesTranslation[param]) {
 							const translation = attributesTranslation[param];
-							if (translation)
-								parameters[0] = NO_SPACES_FOR_PLUGINS ? translation.replace(' ', '_') : translation;
+							parameters[0] = NO_SPACES_FOR_PLUGINS ? translation.replace(' ', '_') : translation;
 						}
 					}
 				}
 				break;
+			  case 357: // Plugin Command (MZ)
+				if (MV_MODE || !attributesTranslation ||
+					!Array.isArray(parameters) || parameters.length < 4)
+						break;
+				const replaceKVText = ((param_obj) => {
+					if (parameters[1] in param_obj) {
+						const commandKey = param_obj[parameters[1]];
+						if (commandKey in parameters[3] && parameters[3][commandKey] in attributesTranslation) {
+							const translation = attributesTranslation[parameters[3][commandKey]];
+							parameters[3][commandKey] = NO_SPACES_FOR_PLUGINS ? translation.replace(' ', '_') : translation;
+						}
+				  }
+				});
+				// A simple text replacer for specific objects
+				const kvp = substPlaceholders();
+				Object.keys(kvp).forEach((key) => {
+					if (parameters[0] === key)
+						replaceKVText(kvp[key]);
+				});
+				break;
 		}
 	}
 };
+
 
 function csvToArray(text, toDict) {
 	if (!text) return null;
@@ -361,7 +387,7 @@ function csvToArray(text, toDict) {
 
 function getXHRFile(file, callback, onerror, type) {
 	const xhr = new XMLHttpRequest();
-	if (typeof type === 'undefined' || !type) type = 'text/plain';
+	if (typeof type === "undefined" || !type) type = "text/plain";
 	xhr.overrideMimeType(type);
 	xhr.onload = function () {
 		if (xhr.status >= 400 || xhr.responseText.length === 0) {
@@ -376,12 +402,12 @@ function getXHRFile(file, callback, onerror, type) {
 }
 
 // Single dict approach is a bad idea but can work out for some simpler games
-function getMergedTranslations() {
-	if (!fs.existsSync('www/' + MERGED_TRANSLATION_PATH))
+function getMergedTranslations(path) {
+	if (!fs.existsSync((MV_MODE ? "www/" : '') + path))
 		return null;
 	const xhr = new XMLHttpRequest();
-	xhr.overrideMimeType('text/plain');
-	xhr.open("GET", MERGED_TRANSLATION_PATH, false);
+	xhr.overrideMimeType("text/plain");
+	xhr.open("GET", path, false);
 	xhr.send(null);
 	if (xhr.status < 400 && xhr.responseText.length > 0) {
 		const merged = csvToArray(xhr.responseText, false);
@@ -393,9 +419,9 @@ function getMergedTranslations() {
 	return null;
 }
 
-var merged = getMergedTranslations();
-const merged_strings = merged,
-	merged_attrs = merged;
+var	merged = getMergedTranslations(MERGED_TRANSLATION_PATH)
+const	merged_strings = merged,
+		merged_attrs = merged;
 merged = null;
 
 //----------------------------------
@@ -406,8 +432,9 @@ merged = null;
 DataManager.loadDataFile = function (name, src) {
 	if (!src) return;
 	window[name] = null;
-	const attr_name = 'data/' + src.replace('.json', '') + '_attributes.csv';
-	const strings_name = 'data/' + src.replace('.json', '') + '_strings.csv';
+	const attr_fname = "data/" + src.replace(".json", '') + "_attributes.csv";
+	const str_fname = "data/" + src.replace(".json", '') + "_strings.csv";
+	const url = "data/" + src;
 
 	const parseResponse = function (text) {
 		var data = null;
@@ -422,12 +449,12 @@ DataManager.loadDataFile = function (name, src) {
 			const attributes = merged_attrs ? merged_attrs : csvToArray(text, true);
 			if (/Actors|Armors|Items|Weapons|Classes|Skills|Enemies|States/.test(src)) {
 				setObjDataOnBasicDatabase(data, attributes);
-			} else if (src.includes('System')) {
+			} else if (src.includes("System")) {
 				setObjDataOnSystem(data, attributes);
-			} else if (src.includes('Troops')) {
+			} else if (src.includes("Troops")) {
 				setTroops(data, attributes);
-			} else if (src.includes('Events')) {
-				if (merged_strings || !fs.existsSync('www/' + strings_name)) {
+			} else if (src.includes("Events")) {
+				if (merged_strings || !fs.existsSync(MV_MODE ? "www/" + str_fname : str_fname)) {
 					setEvents(data, merged_strings, merged_attrs);
 				} else {
 					const strCallback = function (text) {
@@ -435,11 +462,11 @@ DataManager.loadDataFile = function (name, src) {
 						window[name] = data;
 						DataManager.onLoad(window[name]);
 					}
-					getXHRFile(strings_name, strCallback, () => { strCallback(null); });
+					getXHRFile(str_fname, strCallback, () => { strCallback(null); });
 					return;
 				}
 			} else if (/Map\d+/.test(src)) {
-				if (merged_strings || !fs.existsSync('www/' + strings_name)) {
+				if (merged_strings || !fs.existsSync(MV_MODE ? "www/" + str_fname : str_fname)) {
 					setMapEvents(data, merged_strings, merged_attrs);
 				} else {
 					const strCallback = function (text) {
@@ -447,7 +474,7 @@ DataManager.loadDataFile = function (name, src) {
 						window[name] = data;
 						DataManager.onLoad(window[name]);
 					}
-					getXHRFile(strings_name, strCallback, () => { strCallback(null); });
+					getXHRFile(str_fname, strCallback, () => { strCallback(null); });
 					return;
 				}
 			}
@@ -455,41 +482,74 @@ DataManager.loadDataFile = function (name, src) {
 			DataManager.onLoad(window[name]);
 		}
 
-		if (merged_strings || !fs.existsSync('www/' + attr_name))
+		if (merged_strings || !fs.existsSync(MV_MODE ? "www/" + attr_fname : attr_fname))
 			attrCallback(null);
 		else
-			getXHRFile(attr_name, attrCallback, () => {
-				attrCallback(null);
-			});
+			getXHRFile(attr_fname, attrCallback, () => { attrCallback(null); });
 	};
 
-	const onError = this._mapLoader || function () {
-		DataManager._errorUrl = DataManager._errorUrl || url;
-	};
-	getXHRFile('data/' + src, parseResponse, onError, 'application/json');
+	const onError = MV_MODE ?
+		this._mapLoader || (() => { DataManager._errorUrl = DataManager._errorUrl || url }) :
+		(() => this.onXhrError(name, src, url));
+	getXHRFile("data/" + src, parseResponse, onError, "application/json");
 };
 
 // Image translation wrapper
-const _originalRequestImage = Bitmap.prototype._requestImage;
-Bitmap.prototype._requestImage = function (url) {
-	const translatedFilePath = url.replace(/^(.*\/)([^\/]+)$/, IMG_TRANSLATION_FOLDER);
-	if (fs.existsSync('www/' + translatedFilePath)) {
-		this._image = Bitmap._reuseImages.length !== 0 ? Bitmap._reuseImages.pop() : new Image();
-		if (this._decodeAfterRequest && !this._loader)
-			this._loader = ResourceHandler.createLoader(url, this._requestImage.bind(this, url), this._onError.bind(this));
+if (MV_MODE) {
+	const _originalRequestImage = Bitmap.prototype._requestImage;
+	Bitmap.prototype._requestImage = function (url) {
+		const translatedFilePath = url.replace(/^(.*\/)([^\/]+)$/, IMG_TRANSLATION_FOLDER);
+		if (fs.existsSync("www/" + translatedFilePath)) {
+			this._image = Bitmap._reuseImages.length !== 0 ? Bitmap._reuseImages.pop() : new Image();
+			if (this._decodeAfterRequest && !this._loader)
+				this._loader = ResourceHandler.createLoader(url, this._requestImage.bind(this, url), this._onError.bind(this));
 
-		this._url = translatedFilePath;
-		this._image.src = translatedFilePath;
-		this._loadingState = 'requesting';
+			this._url = translatedFilePath;
+			this._image.src = translatedFilePath;
+			this._loadingState = "requesting";
 
-		this._image.addEventListener('load', this._loadListener = Bitmap.prototype._onLoad.bind(this));
-		this._image.addEventListener('error', this._errorListener = this._loader || Bitmap.prototype._onError.bind(this));
+			this._image.addEventListener("load", this._loadListener = Bitmap.prototype._onLoad.bind(this));
+			this._image.addEventListener("error", this._errorListener = this._loader || Bitmap.prototype._onError.bind(this));
 
-		if (DEBUG)
-			console.log('Using translated image:', translatedFilePath);
-	} else {
-		_originalRequestImage.apply(this, arguments);
-	}
-};
+			if (DEBUG)
+				console.log("Using translated image:", translatedFilePath);
+		} else
+			_originalRequestImage.apply(this, arguments);
+	};
+} else {
+	const _originalStartLoading = Bitmap.prototype._startLoading;
+	Bitmap.prototype._startLoading = function() {
+		this._image = new Image();
+		this._image.onload = this._onLoad.bind(this);
+		this._image.onerror = this._onError.bind(this);
+		this._destroyCanvas();
+		this._loadingState = "loading";
+
+		const translatedFilePath = this._url.replace(/^(.*\/)([^\/]+)$/, IMG_TRANSLATION_FOLDER);
+		if (fs.existsSync(translatedFilePath)) {
+			this._url = translatedFilePath;
+			this._image.src = translatedFilePath;
+			if (this._image.width > 0) {
+				this._image.onload = null;
+				this._onLoad();
+				if (DEBUG)
+					console.log("Using translated image:", translatedFilePath);
+			}
+		} else
+			_originalStartLoading.apply(this, arguments);
+	};
+}
+
+//---------------------------
+// Plugin text placeholders
+//---------------------------
+const substPlaceholders = (() => {
+	return {
+	//"Plugin name" : {"Command name": "Argument name with text to be replaced"}
+	  "TextPicture" : { "set" : "text" },
+	  "DestinationWindow" : { "SET_DESTINATION" : "destination" },
+	  "TorigoyaMZ_NotifyMessage": { "notify" : "message", "notifyWithVariableIcon" : "message" }
+	};
+});
 
 })();
