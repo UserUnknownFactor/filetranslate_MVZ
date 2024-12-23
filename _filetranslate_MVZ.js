@@ -33,17 +33,17 @@
  * @type boolean
  * @on Replace spaces with underscores (_) before sending them to the plugin.
  * @off Send the translation as is.
- * @default false
+ * @default true
  */
 
 (() => {
 "use strict";
 
-const PLUGIN_NAME = "_filetranslate_MV";
+const PLUGIN_NAME = "_filetranslate_MVZ";
 const MV_MODE = (Utils.RPGMAKER_NAME === "MV");
 
 const fs = require("fs");
-const getBoolean = (str) => { str !== '' && str.match(/(?:true|y(?:es)?)/i) };
+const getBoolean = (str) => { return !!str && !!str.match(/(?:true|y(?:es)?)/i) };
 
 //----------------------------------
 // Set items
@@ -51,12 +51,14 @@ const getBoolean = (str) => { str !== '' && str.match(/(?:true|y(?:es)?)/i) };
 const DEBUG = false;
 
 const PARAM = PluginManager.parameters(PLUGIN_NAME);
-const SCRIPT_WHOLE_LINES = getBoolean(String(PARAM["Whole Script Lines"] || "true"));
-const IGNORE_RARE = getBoolean(String(PARAM["Ignore Rare"] || "false"));
-const NO_SPACES_FOR_PLUGINS = getBoolean(String(PARAM["Replace Attribute Spaces"] || "false"));
+const SCRIPT_WHOLE_LINES = getBoolean(PARAM["Whole Script Lines"] || "true");
+const IGNORE_RARE = getBoolean(PARAM["Ignore Rare"] || "false");
+const NO_SPACES_FOR_PLUGINS = getBoolean(PARAM["Replace Attribute Spaces"] || "true");
+const LINE_MERGE_CHARACTER = String(PARAM["Line-merge Character"] || '');
 const MERGED_TRANSLATION_PATH = String(PARAM["Merged Translations"] || "data/_combined.csv");
 
-const IMG_TRANSLATION_FOLDER = "$1translated/$2";
+const TRANSLATED_KEY = "translated"
+const IMG_TRANSLATION_FOLDER = "$1" + TRANSLATED_KEY + "/$2";
 const CSV_SEPARATOR = '→';
 const CSV_ESCAPE = '¶';
 
@@ -64,14 +66,13 @@ const CSV_ESCAPE = '¶';
 // Main functionality
 //----------------------------------
 
-// Extracts the parts surrounded by " or ' quotes from the text and store them in an array
+// Extracts array of parts surrounded by " or ' quotes from the text
 const extractQuotedStrings = (str) => {
-	const pattern = /(["'])(?:\\\1|.)*?\1/g;
-	let match;
-	const results = [];
-	while ((match = pattern.exec(str)) !== null) {
-		results.push(match[1] || match[2]);
-	}
+	const pattern = /([\"\'])((?:\\\1|.)*?)\1/g;
+	let match, results = [];
+	while ((match = pattern.exec(str)) !== null)
+		if (match[2])
+			results.push(match[2]);
 	return results;
 };
 
@@ -110,7 +111,7 @@ const setObjDataOnBasicDatabase = ((data, dataTranslation) => {
 
 const setObjDataOnSystem = ((data, dataTranslation) => {
 	if (!data || !dataTranslation) return;
-	//setObjData(data, "gameTitle", dataTranslation);
+	setObjData(data, "gameTitle", dataTranslation);
 	["armorTypes", "elements", "equipTypes", "skillTypes", "weaponTypes"
 	].forEach((property) => {
 		setArrayData(data[property], dataTranslation);
@@ -214,14 +215,18 @@ const setEventList = (eventList, attributesTranslation, stringsTranslation) => {
 				if (pushFirst) pushFirst = false;
 			}
 
-			if (!codedTexts.length) return;
+			let i = codedTexts.length - 1;
+			while (i >= 0 && codedTexts[i] === "") i--;
+			let codedTextsTrimmed = codedTexts.slice(0, i + 1);
+			if (!codedTextsTrimmed.length) return;
 
-			const translateLines = (translations, is_list) => {
+			const translateLines = (translations, is_list, is_merged=false) => {
 				translations.forEach((text, i) => {
-					if (i < codedTexts.length) {
+					if (i < codedTextsTrimmed.length) {
 						// NOTE: not for some strange 401's with >1 params
 						eventList[_index + i].parameters[0] = is_list ? text[1] : text;
 					} else {
+						// insert new text separators and then add text lines when needed
 						if (separateBy && i % separateBy === 0) {
 							eventList.splice(_index + i, 0, separatorRpgCode(prev_indent, prev_params));
 							_index++;
@@ -230,26 +235,37 @@ const setEventList = (eventList, attributesTranslation, stringsTranslation) => {
 							rpgCode(eventCode, prev_indent, [is_list ? text[1] : text]));
 					}
 				});
+				if (is_merged) {
+					// reset all following text lines if we merged them beforehand
+					for (let i = 1; i < codedTexts.length; i++)
+						eventList[_index + i].parameters[0] = '';
+				}
 			}
 
-			const combinedText = codedTexts.join('\n');
+			const combinedText = codedTextsTrimmed.join(LINE_MERGE_CHARACTER);
 			if (combinedText === '') {
 				_index += count - 1;
 				return;
 			}
 			if (!stringsAreArray && stringsTranslation && combinedText in stringsTranslation) {
-				const translations = stringsTranslation[combinedText].split("\n");
+				const translations = codedTextsTrimmed;
 				translateLines(translations, false);
-				_index += Math.max(codedTexts.length, translations.length) - 1;
+				_index += Math.max(codedTextsTrimmed.length, translations.length) - 1;
 			} else if (stringsAreArray && stringsTranslation.length) {
 				// Attempt to find a matching sequence in stringsTranslation
-				let translationFound = false, translationIndex = 0;
+				let translationFound = false, merged_lines = false, translationIndex = 0;
 				for (let i = 0; i < stringsTranslation.length; i++) {
 					let match = true;
-					for (let j = 0; j < codedTexts.length; j++) {
-						if (i + j > stringsTranslation.length - 1 || stringsTranslation[i + j][0] !== codedTexts[j]) {
+					for (let j = 0; j < codedTextsTrimmed.length; j++) {
+						if (i + j > stringsTranslation.length - 1 || stringsTranslation[i + j][0] !== codedTextsTrimmed[j]) {
 							match = false;
 							break;
+						}
+					}
+					if (!match) {
+						if (combinedText == stringsTranslation[i][0]) {
+							merged_lines = true;
+							match = true;
 						}
 					}
 					if (match) {
@@ -259,9 +275,9 @@ const setEventList = (eventList, attributesTranslation, stringsTranslation) => {
 				}
 				if (translationFound) {
 					const translations = stringsTranslation.splice(
-						translationIndex, translationIndex + codedTexts.length
+						translationIndex, translationIndex + merged_lines ? 1 : codedTextsTrimmed.length
 					);
-					translateLines(translations, true);
+					translateLines(translations, true, merged_lines);
 				}
 				else
 					_index += count - 1;
@@ -281,12 +297,12 @@ const setEventList = (eventList, attributesTranslation, stringsTranslation) => {
 				setArrayData(parameters[0], attributesTranslation);
 				break;
 			case 402: // When [**]
-				if (!IGNORE_RARE && attributesTranslation && parameters[1] in attributesTranslation) {
+				if (!IGNORE_RARE && attributesTranslation && parameters[1] in attributesTranslation)
 					parameters[1] = attributesTranslation[parameters[1]];
-				}
 				break;
 			case 122: // Control Variables
-				if (!IGNORE_RARE && parameters[3] === 4) handleScript(parameters, 4);
+				if (!IGNORE_RARE && parameters[3] === 4)
+					handleScript(parameters, 4);
 				break;
 			case 111: // Conditional Branch
 				if (!IGNORE_RARE && parameters[0] === 12 && parameters[1])
@@ -303,9 +319,8 @@ const setEventList = (eventList, attributesTranslation, stringsTranslation) => {
 			case 320: // Change Name
 			case 324: // Change Nickname
 			case 325: // Change Profile
-				if (!IGNORE_RARE && attributesTranslation && parameters[1] in attributesTranslation && attributesTranslation[parameters[1]]) {
+				if (!IGNORE_RARE && attributesTranslation && parameters[1] in attributesTranslation && attributesTranslation[parameters[1]])
 					parameters[1] = attributesTranslation[parameters[1]];
-				}
 				break;
 			case 355: // Script
 				if (!IGNORE_RARE) {
@@ -322,13 +337,18 @@ const setEventList = (eventList, attributesTranslation, stringsTranslation) => {
 				break;
 			case 356: // Plugin Command
 				if (!IGNORE_RARE) {
-					const splitParams = parameters[0].split(' ');
-					for (const param of splitParams) {
+					const splitParams = parameters[0].split(/\s+/);
+					let changed = false;
+					for (let i = 1; i < splitParams.length; i++) {
+						let param = splitParams[i];
 						if (attributesTranslation && param in attributesTranslation && attributesTranslation[param]) {
-							const translation = attributesTranslation[param];
-							parameters[0] = NO_SPACES_FOR_PLUGINS ? translation.replace(' ', '_') : translation;
+							const tl = attributesTranslation[param];
+							splitParams[i] = NO_SPACES_FOR_PLUGINS ? tl.replace(/ /g, '_') : tl;
+							changed = true;
 						}
 					}
+					if (changed)
+						parameters[0] = splitParams.join(' ')
 				}
 				break;
 			  case 357: // Plugin Command (MZ)
@@ -340,7 +360,7 @@ const setEventList = (eventList, attributesTranslation, stringsTranslation) => {
 						const commandKey = param_obj[parameters[1]];
 						if (commandKey in parameters[3] && parameters[3][commandKey] in attributesTranslation) {
 							const translation = attributesTranslation[parameters[3][commandKey]];
-							parameters[3][commandKey] = NO_SPACES_FOR_PLUGINS ? translation.replace(' ', '_') : translation;
+							parameters[3][commandKey] = NO_SPACES_FOR_PLUGINS ? translation.replace(/ /g, '_') : translation;
 						}
 				  }
 				});
@@ -498,15 +518,17 @@ DataManager.loadDataFile = function (name, src) {
 if (MV_MODE) {
 	const _originalRequestImage = Bitmap.prototype._requestImage;
 	Bitmap.prototype._requestImage = function (url) {
-		const translatedFilePath = url.replace(/^(.*\/)([^\/]+)$/, IMG_TRANSLATION_FOLDER);
+		//TRANSLATED_KEY check is there because of the recursive calls to _requestImage(url) with a previously set this._url
+		const translatedFilePath = !url.contains("/" + TRANSLATED_KEY + "/") ? url.replace(/^(.*\/)([^\/]+)$/, IMG_TRANSLATION_FOLDER) : url;
 		if (fs.existsSync("www/" + translatedFilePath)) {
 			this._image = Bitmap._reuseImages.length !== 0 ? Bitmap._reuseImages.pop() : new Image();
+			//this._decodeAfterRequest = true; // NOTE: alt approach
 			if (this._decodeAfterRequest && !this._loader)
 				this._loader = ResourceHandler.createLoader(url, this._requestImage.bind(this, url), this._onError.bind(this));
 
 			this._url = translatedFilePath;
-			this._image.src = translatedFilePath;
 			this._loadingState = "requesting";
+			this._image.src = translatedFilePath;
 
 			this._image.addEventListener("load", this._loadListener = Bitmap.prototype._onLoad.bind(this));
 			this._image.addEventListener("error", this._errorListener = this._loader || Bitmap.prototype._onError.bind(this));

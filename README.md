@@ -19,6 +19,7 @@ If you want to translate images, just add their unencrypted translations to the 
 * `Replace Attribute Spaces`: Specifies how to handle plugin command text.
     * `true` Replace spaces with underscores (`_`) before sending them to the plugin. You'll need to modify it to revert this with `.replace('_', ' ')` manually.
     * `false` Send the translation as is.
+* `Line-merge Character`: Specifies what character to use when merging text split across multiple text codes, default is `''`.
 * `Merged Translations`: Specifies where to search for a merged translations dictionary.
     * `<relative path>` Relative path to the file without `www`. If it's found per-origin .csv files will be ignored.
 

@@ -6,8 +6,10 @@ from filetranslate.language_fn import is_in_language
 
 GLOBAL_NAMES = []
 MZ_MODE = not os.path.isdir(".\\www")
+LINE_MERGE_CHARACTER = '' #'\n'
+
 MZ_PLUGIN_DATA = {
-#   "Plugin name": {"Command name": "Argument name with text to be replaced"}
+#   "Plugin name": {"Command name": "Name of the argument with text to be replaced"}
     "TextPicture": {"set": "text"},
     "DestinationWindow": {"SET_DESTINATION": "destination"},
     "TorigoyaMZ_NotifyMessage": {"notify": "message", "notifyWithVariableIcon": "message"}
@@ -18,8 +20,8 @@ def looks_digit(s):
     return s.translate(DIGIT_CLEANUP).isdigit()
 
 def extract_quoted_strings(script_text):
-    matches = re.findall(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'', script_text)
-    extracted_text = [match.strip('"').strip("'") for match in matches]
+    matches = re.findall(r'([\"\'])((?:\\\1|.)*?)\1', script_text)
+    extracted_text = [match[1] for match in matches if match and len(match)>1]
     extracted_text = list(filter(lambda a: is_in_language(a, 'JA'), extracted_text))
     return extracted_text
 
@@ -91,7 +93,7 @@ def parse_codes(original_page, translated_page, name, no_rare_codes, stop_words,
             elif code == 122:  # Control Variables
                 if params[3] == 4:  # Script
                     scripts = extract_quoted_strings(params[4])
-                    tr_scripts = extract_quoted_strings(tr_params[4]) if tr_params else []
+                    tr_scripts = extract_quoted_strings(tr_params[4]) if tr_params else [''] * len(scripts)
                     for s, tr_s in zip(scripts, tr_scripts):
                         if s:
                             attributes[s] = tr_s
@@ -103,8 +105,8 @@ def parse_codes(original_page, translated_page, name, no_rare_codes, stop_words,
                     tr_current_lines = [''] * len(current_lines)
 
                 if merge_lines:
-                    current_text = ''.join(current_lines)
-                    tr_current_text = ''.join(tr_current_lines)
+                    current_text = LINE_MERGE_CHARACTER.join(current_lines)
+                    tr_current_text = LINE_MERGE_CHARACTER.join(tr_current_lines)
                     if current_text:
                         text_entries.append([current_text, tr_current_text, global_name])
                     i = end_index
@@ -121,7 +123,7 @@ def parse_codes(original_page, translated_page, name, no_rare_codes, stop_words,
                 if any(w in params[0] for w in stop_words):
                     continue
                 scripts = extract_quoted_strings(params[0])
-                tr_scripts = extract_quoted_strings(tr_params[0]) if tr_params else []
+                tr_scripts = extract_quoted_strings(tr_params[0]) if tr_params else [''] * len(scripts)
                 for s, tr_s in zip(scripts, tr_scripts):
                     if s:
                         attributes[s] = tr_s
@@ -129,7 +131,7 @@ def parse_codes(original_page, translated_page, name, no_rare_codes, stop_words,
                 if any(w in params[0] for w in stop_words):
                     i += 1
                     continue
-                split_params = params[0].split(' ')
+                split_params = re.split(r'\s+', params[0])
                 if len(split_params) > 1 and split_params[1] and not looks_digit(
                         split_params[1]) and "_" not in split_params[1]:
                     tr_split_params = tr_params[0].split(' ') if tr_params else []
@@ -391,19 +393,23 @@ def create_csv_files(input_folder, output_folder, no_rare_codes, stop_words, mer
         translated_fully = {}
 
     file_path = os.path.join(input_folder, 'Actors.json')
-    with open(file_path, 'r', encoding='utf-8-sig') as file:
-        data = json.load(file)
-        tr_data = translated_fully.get('Actors.json', [])
-        attrs = parse_attributes(data, tr_data, ['name', 'nickname', 'profile', 'note', 'description',
-                                        'message1', 'message2', 'message3', 'message4'])
-        GLOBAL_NAMES = [n for n in parse_attributes(data, tr_data, ['name']).keys()]
-        write_attributes('Actors.json', attrs)
+    if os.path.isfile(file_path):
+        with open(file_path, 'r', encoding='utf-8-sig') as file:
+            data = json.load(file)
+            tr_data = translated_fully.get('Actors.json', [])
+            attrs = parse_attributes(
+                data, tr_data,
+                ['name', 'nickname', 'profile', 'note', 'description',
+                'message1', 'message2', 'message3', 'message4'])
+            GLOBAL_NAMES = [n for n in parse_attributes(data, tr_data, ['name']).keys()]
+            write_attributes('Actors.json', attrs)
 
     for file_name in os.listdir(input_folder):
         if file_name.endswith('.json'):
             print(f"parsing {file_name}...")
             file_path = os.path.join(input_folder, file_name)
             if "Actors" in file_path: continue
+            if not os.path.isfile(file_path): continue
             with open(file_path, 'r', encoding='utf-8-sig') as file:
                 try:
                     data = json.load(file)
@@ -417,18 +423,22 @@ def create_csv_files(input_folder, output_folder, no_rare_codes, stop_words, mer
             if "Armors" in file_path or "Items" in file_path or "Weapons" in file_path or \
             "Classes" in file_path or "Skills" in file_path or "Enemies" in file_path or "States" in file_path:
                 # Basic database objects (Actors, Armors, etc.)
-                attrs = parse_attributes(data, tr_data, ['name', 'nickname', 'profile', 'note', 'description',
-                                        'message1', 'message2', 'message3', 'message4'])
+                attrs = parse_attributes(
+                    data, tr_data,
+                    ['name', 'nickname', 'profile', 'note', 'description',
+                     'message1', 'message2', 'message3', 'message4'])
             elif "System" in file_path:
                 # System data
                 attrs = parse_attributes([data], [tr_data], ['gameTitle'])
-                attrs |= parse_array_attributes(data, tr_data, ['armorTypes', 'elements', 'equipTypes',
-                                                                'skillTypes', 'weaponTypes'])
-                if (not no_rare_codes):
-                    attrs |= parse_array_attributes(data['terms'], tr_data.get(
-                        'terms', {}), ['basic', 'commands', 'params'])
-                    attrs |= parse_array_attributes(data['terms']['messages'], tr_data.get(
-                        'terms', {}).get('messages', {}), dump_all=True)
+                attrs |= parse_array_attributes(
+                    data, tr_data,
+                    ['armorTypes', 'elements', 'equipTypes',
+                     'skillTypes', 'weaponTypes']
+                )
+                attrs |= parse_array_attributes(data['terms'], tr_data.get(
+                    'terms', {}), ['basic', 'commands', 'params'])
+                attrs |= parse_array_attributes(data['terms']['messages'], tr_data.get(
+                    'terms', {}).get('messages', {}), dump_all=True)
             elif "Troops" in file_path:
                 # Troop data
                 _, attrs = parse_events_list(data, tr_data, False, [])
