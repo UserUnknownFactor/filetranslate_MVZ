@@ -13,13 +13,13 @@ If you want to translate images, just add their unencrypted translations to the 
 * `Whole Script Lines`: Specifies how to handle script translations.  
      * `true` Replace scripts by the entire line (recommended).  
      * `false` Replace only the text inside the `"`/`'` marks.  
- * `Ignore Rare`: Specifies how to handle uncommon parameters.
-     * `true` Ignore codes that rarely contain displayed text (recommended).  
-     * `false` Check all known codes with text.  
+ * `Ignore Rare`: Specifies which uncommon parameters to ignore (see the plugin code for their meanings).
+    Default: `[402, 122, 111, 108, 408, 320, 324, 325, 655]`
 * `Replace Attribute Spaces`: Specifies how to handle plugin command text.
     * `true` Replace spaces with underscores (`_`) before sending them to the plugin. You'll need to modify it to revert this with `.replace('_', ' ')` manually.
     * `false` Send the translation as is.
-* `Line-merge Character`: Specifies what character to use when merging text split across multiple text codes, default is `''`.
+* `Line-merge Character`: Specifies what character to use when merging text split across multiple text codes.
+    Default: `''` (empty string)
 * `Merged Translations`: Specifies where to search for a merged translations dictionary.
     * `<relative path>` Relative path to the file without `www`. If it's found per-origin .csv files will be ignored.
 

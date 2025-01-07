@@ -10,6 +10,9 @@
  * 	`data\{JSON name without extension}_[strings|attributes].csv`
  * 	both with `source→translation→context` format.
  *
+ * To translate images simply put them as is into a `translated`
+ * subfolder of the corresponding images folder.
+ *
  *  NOTE: Arrows (`→`), newlines and the escape character itself
  * 		  can be escaped with `¶` character.
  *
@@ -22,11 +25,14 @@
  * @default false
  *
  * @param Ignore Rare
- * @desc Sets how to handle
- * @type boolean
- * @on Ignore codes that rarely contain displayed text (recommended)
- * @off Check all known codes with text.
- * @default false
+ * @desc Sets which text-containing codes to ignore, see the values in the code
+ * @type Array
+ * @default [402, 122, 111, 108, 408, 320, 324, 325, 655]
+ *
+ * @param Line-merge Character
+ * @desc Sets which character was used on merged 401 texts etc.
+ * @type string
+ * @default ''
  *
  * @param Replace Attribute Spaces
  * @desc Sets how to handle plugin texts.
@@ -34,6 +40,11 @@
  * @on Replace spaces with underscores (_) before sending them to the plugin.
  * @off Send the translation as is.
  * @default true
+ *
+ * @param Merged Translations
+ * @desc Specifies the location of the merged translations CSV file, it'll be used as the global dictionary if found.
+ * @type string
+ * @default "data/_combined.csv"
  */
 
 (() => {
@@ -44,6 +55,7 @@ const MV_MODE = (Utils.RPGMAKER_NAME === "MV");
 
 const fs = require("fs");
 const getBoolean = (str) => { return !!str && !!str.match(/(?:true|y(?:es)?)/i) };
+const getArray = (str) => { return (typeof str === "undefined") ? [] : ((typeof str === "string") ? JSON.parse(str) : str)};
 
 //----------------------------------
 // Set items
@@ -52,7 +64,7 @@ const DEBUG = false;
 
 const PARAM = PluginManager.parameters(PLUGIN_NAME);
 const SCRIPT_WHOLE_LINES = getBoolean(PARAM["Whole Script Lines"] || "true");
-const IGNORE_RARE = getBoolean(PARAM["Ignore Rare"] || "false");
+const IGNORE_RARE = getArray(PARAM["Ignore Rare"] || [402, 122, 111, 108, 408, 320, 324, 325, 655]);
 const NO_SPACES_FOR_PLUGINS = getBoolean(PARAM["Replace Attribute Spaces"] || "true");
 const LINE_MERGE_CHARACTER = String(PARAM["Line-merge Character"] || '');
 const MERGED_TRANSLATION_PATH = String(PARAM["Merged Translations"] || "data/_combined.csv");
@@ -178,7 +190,10 @@ const setEventList = (eventList, attributesTranslation, stringsTranslation) => {
 		let isChanged = false;
 		jpTexts.forEach((text) => {
 			if (checkFullCharacter(text) && text in dataTranslation) {
-				scriptText = scriptText.replace(text, dataTranslation[text]);
+				// BUGFIX: the inner text's quote characters will break it otherwise // either use
+				//dataTranslation[text].replace(/(?<=\w)'(?=\w)/g, "’").replace(/([\"\'])((?:\\\1|.)*?)\1/g, '“$2”'); // or
+				//dataTranslation[text].replace(/(?<=[^\\])["']/g, "\\$1");
+				scriptText = scriptText.replace(text, dataTranslation[text].replace(/(?<=[^\\])["']/g, "\\$1"));
 				isChanged = true;
 			}
 		});
@@ -190,11 +205,13 @@ const setEventList = (eventList, attributesTranslation, stringsTranslation) => {
 		if (!attributesTranslation) return;
 		if (SCRIPT_WHOLE_LINES) {
 			if (params[index] in attributesTranslation && attributesTranslation[params[index]]) {
+				// NOTE: You should correct quotes manually for this since they're obvious there
 				params[index] = attributesTranslation[params[index]];
 			}
 		} else {
 			const { scriptText, isChanged } = replaceScript(params[index], attributesTranslation);
-			if (isChanged && scriptText) params[index] = scriptText;
+			if (isChanged && scriptText)
+				params[index] = scriptText;
 		}
 	};
 
@@ -297,61 +314,64 @@ const setEventList = (eventList, attributesTranslation, stringsTranslation) => {
 				setArrayData(parameters[0], attributesTranslation);
 				break;
 			case 402: // When [**]
-				if (!IGNORE_RARE && attributesTranslation && parameters[1] in attributesTranslation)
+				if (IGNORE_RARE.indexOf(code) === -1 && attributesTranslation && parameters[1] in attributesTranslation)
 					parameters[1] = attributesTranslation[parameters[1]];
 				break;
 			case 122: // Control Variables
-				if (!IGNORE_RARE && parameters[3] === 4)
+				if (IGNORE_RARE.indexOf(code) === -1 && parameters[3] === 4)
 					handleScript(parameters, 4);
 				break;
 			case 111: // Conditional Branch
-				if (!IGNORE_RARE && parameters[0] === 12 && parameters[1])
+				if (IGNORE_RARE.indexOf(code) === -1 && parameters[0] === 12 && parameters[1])
 					handleScript(parameters, 1);
 				break;
 			case 108: // Comment
-				if (!IGNORE_RARE) {
-					processTextEvent(408, (event) => event.parameters[0], 6,
-						(indent, text) => rpgCode(108, indent, [text]), true);
-				}
+				if (IGNORE_RARE.indexOf(code) !== -1)
+					break;
+				processTextEvent(408, (event) => event.parameters[0], 6,
+					(indent, text) => rpgCode(108, indent, [text]), true);
 				break;
-			case 408: // Multi-line Comment
+			case 408: // Multi-line Comment (stray)
 				break;
 			case 320: // Change Name
 			case 324: // Change Nickname
 			case 325: // Change Profile
-				if (!IGNORE_RARE && attributesTranslation && parameters[1] in attributesTranslation && attributesTranslation[parameters[1]])
+				if (IGNORE_RARE.indexOf(code) === -1 && attributesTranslation &&
+						parameters[1] in attributesTranslation && attributesTranslation[parameters[1]])
 					parameters[1] = attributesTranslation[parameters[1]];
 				break;
 			case 355: // Script
-				if (!IGNORE_RARE) {
-					handleScript(parameters, 0);
+				if (IGNORE_RARE.indexOf(code) !== -1)
+					break;
+				handleScript(parameters, 0);
+				_index++;
+				while (getNextEventCode(eventList, _index) === 655) {
+					handleScript(eventList[_index].parameters, 0);
 					_index++;
-					while (getNextEventCode(eventList, _index) === 655) {
-						handleScript(eventList[_index].parameters, 0);
-						_index++;
-					}
-					_index--;
 				}
+				_index--;
 				break;
-			case 655: // Multi-line script
+			case 655: // Multi-line script (stray)
 				break;
 			case 356: // Plugin Command
-				if (!IGNORE_RARE) {
-					const splitParams = parameters[0].split(/\s+/);
-					let changed = false;
-					for (let i = 1; i < splitParams.length; i++) {
-						let param = splitParams[i];
-						if (attributesTranslation && param in attributesTranslation && attributesTranslation[param]) {
-							const tl = attributesTranslation[param];
-							splitParams[i] = NO_SPACES_FOR_PLUGINS ? tl.replace(/ /g, '_') : tl;
-							changed = true;
-						}
+				if (IGNORE_RARE.indexOf(code) !== -1)
+					break;
+				const splitParams = parameters[0].split(/\s+/);
+				let changed = false;
+				for (let i = 1; i < splitParams.length; i++) {
+					let param = splitParams[i];
+					if (attributesTranslation && param in attributesTranslation && attributesTranslation[param]) {
+						const tl = attributesTranslation[param];
+						splitParams[i] = NO_SPACES_FOR_PLUGINS ? tl.replace(/ /g, '_') : tl;
+						changed = true;
 					}
 					if (changed)
-						parameters[0] = splitParams.join(' ')
+						parameters[0] = splitParams.join(' ');
 				}
 				break;
-			  case 357: // Plugin Command (MZ)
+			case 357: // Plugin Command (MZ)
+				if (IGNORE_RARE.indexOf(code) !== -1)
+					break;
 				if (MV_MODE || !attributesTranslation ||
 					!Array.isArray(parameters) || parameters.length < 4)
 						break;
@@ -364,7 +384,7 @@ const setEventList = (eventList, attributesTranslation, stringsTranslation) => {
 						}
 				  }
 				});
-				// A simple text replacer for specific objects
+				// A simple text replacer for specific object properties of known plugins
 				const kvp = substPlaceholders();
 				Object.keys(kvp).forEach((key) => {
 					if (parameters[0] === key)

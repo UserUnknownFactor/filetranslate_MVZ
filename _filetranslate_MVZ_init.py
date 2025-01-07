@@ -19,6 +19,33 @@ DIGIT_CLEANUP = str.maketrans('', '', '-,.')
 def looks_digit(s):
     return s.translate(DIGIT_CLEANUP).isdigit()
 
+def levenshtein_distance(str1, str2):
+    """Computes the Levenshtein distance between two strings"""
+    m = len(str1)
+    n = len(str2)
+    dp = [[0 for _ in range(n + 1)] for _ in range(m + 1)]
+ 
+    for i in range(m + 1):
+        dp[i][0] = i
+    for j in range(n + 1):
+        dp[0][j] = j
+ 
+    for i in range(1, m + 1):
+        for j in range(1, n + 1):
+            if str1[i - 1] == str2[j - 1]:
+                dp[i][j] = dp[i - 1][j - 1]
+            else:
+                dp[i][j] = 1 + min(dp[i][j - 1], dp[i - 1][j], dp[i - 1][j - 1])
+ 
+    return dp[m][n]
+
+def similarity_score(s1, s2):
+    max_len = max(len(s1), len(s2))
+    if max_len == 0:
+        return 100
+    distance = levenshtein_distance(s1, s2)
+    return (1 - distance / max_len) * 100
+
 def extract_quoted_strings(script_text):
     matches = re.findall(r'([\"\'])((?:\\\1|.)*?)\1', script_text)
     extracted_text = [match[1] for match in matches if match and len(match)>1]
@@ -461,6 +488,7 @@ def create_csv_files(input_folder, output_folder, no_rare_codes, stop_words, mer
                 for i, row in enumerate(strs):
                     if row[0] in pretranslated_dict:
                         strs[i][1] = pretranslated_dict[row[0]]
+
                 strs_old = read_csv_list(csv_path) # read the old existing string translation
                 for i, row_i in enumerate(strs):
                     for j, row_j in enumerate(strs_old):
@@ -468,6 +496,21 @@ def create_csv_files(input_folder, output_folder, no_rare_codes, stop_words, mer
                             strs[i][1] = row_j[1]
                             strs_old.pop(j)
                             break
+                for i, row_i in enumerate(strs):
+                    if not strs[i][1]: 
+                        best_match = None
+                        best_score = 0
+                        best_index = -1
+                        for j, row_j in enumerate(strs_old):
+                            score = similarity_score(row_i[0], row_j[0])
+                            if score > best_score:
+                                best_match = row_j
+                                best_score = score
+                                best_index = j
+                        if best_match and best_score > 80:
+                            strs[i][1] = best_match[1]
+                            strs_old.pop(best_index)
+
                 write_csv_list(csv_path, strs)
                 print(f" Created {os.path.relpath(csv_path)} with {len(strs)} strings")
             # Create attributes CSV
