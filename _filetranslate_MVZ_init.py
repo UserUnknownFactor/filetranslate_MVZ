@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import json, os, re, argparse, difflib
 from types import NoneType
-from filetranslate.service_fn import read_csv_list, write_csv_list
+from filetranslate.service_fn import read_csv_dict, read_csv_list, write_csv_list
 from filetranslate.language_fn import is_in_language
 
 GLOBAL_NAMES = []
@@ -366,20 +366,23 @@ def load_translations(translations_folder):
     return translations
 
 def create_csv_files(input_folder, output_folder, no_rare_codes, stop_words, merge_lines, translation_folder):
-    def write_attributes(name, data):
+    pretranslated_dict = {}
+    global GLOBAL_NAMES
+
+    def write_attributes(name, data, pretranslated_dict):
         if data:
             csv_name = os.path.splitext(name)[0] + '_attributes.csv'
             csv_path = os.path.join(output_folder, csv_name)
             attrs = [[k, v[0], v[1]] if isinstance(v, list) else [k, v] for k, v in data.items() if k]
+            existing_data = read_csv_dict(csv_path) # read the existing translations
+            pretranslated_dict.update(existing_data)
             for i, row in enumerate(attrs):
                 if row[0] in pretranslated_dict:
                     attrs[i][1] = pretranslated_dict[row[0]]
             write_csv_list(csv_path, attrs)
-
-    global GLOBAL_NAMES
+            print(f" Created {os.path.relpath(csv_path)} with {len(attrs)} attributes")
 
     pretranslated = read_csv_list(os.path.join(input_folder, '_combined.csv'))
-    pretranslated_dict = {}
     for row in pretranslated:
         texts = row[0].split('\\n')
         text_tls = row[1].split('\\n')
@@ -402,11 +405,11 @@ def create_csv_files(input_folder, output_folder, no_rare_codes, stop_words, mer
                 ['name', 'nickname', 'profile', 'note', 'description',
                 'message1', 'message2', 'message3', 'message4'])
             GLOBAL_NAMES = [n for n in parse_attributes(data, tr_data, ['name']).keys()]
-            write_attributes('Actors.json', attrs)
+            write_attributes('Actors.json', attrs, pretranslated_dict)
 
     for file_name in os.listdir(input_folder):
-        if file_name.endswith('.json'):
-            print(f"parsing {file_name}...")
+        if file_name.endswith('.json') and file_name != 'Actors.json':
+            print(f"Parsing {file_name}...")
             file_path = os.path.join(input_folder, file_name)
             if "Actors" in file_path: continue
             if not os.path.isfile(file_path): continue
@@ -458,9 +461,17 @@ def create_csv_files(input_folder, output_folder, no_rare_codes, stop_words, mer
                 for i, row in enumerate(strs):
                     if row[0] in pretranslated_dict:
                         strs[i][1] = pretranslated_dict[row[0]]
+                strs_old = read_csv_list(csv_path) # read the old existing string translation
+                for i, row_i in enumerate(strs):
+                    for j, row_j in enumerate(strs_old):
+                        if row_i[0] == row_j[0]:
+                            strs[i][1] = row_j[1]
+                            strs_old.pop(j)
+                            break
                 write_csv_list(csv_path, strs)
+                print(f" Created {os.path.relpath(csv_path)} with {len(strs)} strings")
             # Create attributes CSV
-            write_attributes(file_name, attrs)
+            write_attributes(file_name, attrs, pretranslated_dict)
 
 def main():
     parser = argparse.ArgumentParser(
