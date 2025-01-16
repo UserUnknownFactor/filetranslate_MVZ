@@ -6,7 +6,9 @@ from filetranslate.language_fn import is_in_language
 
 GLOBAL_NAMES = []
 MZ_MODE = not os.path.isdir(".\\www")
-LINE_MERGE_CHARACTER = '' #'\n'
+LINE_MERGE_CHARACTER = '' #'\n' # NOTE: set to '\n' to create multiline originals
+ADD_EVENT_NAMES = False # NOTE: usually this is not needed, so JIC
+REMOVE_TL_LINEBREAKS = ' ' # NOTE: set this to None to keep TL linebreaks as is
 
 MZ_PLUGIN_DATA = {
 #   "Plugin name": {"Command name": "Name of the argument with text to be replaced"}
@@ -135,11 +137,15 @@ def parse_codes(original_page, translated_page, name, no_rare_codes, stop_words,
                     current_text = LINE_MERGE_CHARACTER.join(current_lines)
                     tr_current_text = LINE_MERGE_CHARACTER.join(tr_current_lines)
                     if current_text:
+                        if REMOVE_TL_LINEBREAKS is not None:
+                            tr_current_text = tr_current_text.replace('\n', REMOVE_TL_LINEBREAKS)
                         text_entries.append([current_text, tr_current_text, global_name])
                     i = end_index
                 else:
                     for current_line, tr_current_line in zip(current_lines, tr_current_lines):
                         if current_line:
+                            if REMOVE_TL_LINEBREAKS is not None:
+                                tr_current_line = tr_current_line.replace('\n', REMOVE_TL_LINEBREAKS)
                             text_entries.append([current_line, tr_current_line, global_name])
                     i += len(current_lines) - 1
                 continue
@@ -261,6 +267,8 @@ def parse_events_list(original_data, translated_data, no_rare_codes, stop_words,
                     translated_event = translated_data[i - i1 + j1] if i - i1 + j1 < len(translated_data) else {}
                     strs, attrs = parse_codes(original_event, translated_event, original_event['name'],
                                               no_rare_codes, stop_words, merge_lines)
+                    if ADD_EVENT_NAMES and "name" in original_event:
+                        attributes |= {original_event["name"]: translated_event["name"]}
                     strings.extend(strs)
                     attributes |= attrs
             elif tag == 'insert':
@@ -270,12 +278,16 @@ def parse_events_list(original_data, translated_data, no_rare_codes, stop_words,
                     strs, attrs = parse_codes(translated_event, [], translated_event['name'], no_rare_codes,
                                               stop_words, merge_lines)
                     strings.extend(strs)
+                    if ADD_EVENT_NAMES and "name" in translated_event:
+                        attributes |= {translated_event["name"]:''}
                     attributes |= attrs
     else:
         for original_event in original_data:
             if not original_event: continue
             strs, attrs = parse_codes(original_event, {}, original_event['name'],
                                       no_rare_codes, stop_words, merge_lines)
+            if ADD_EVENT_NAMES and "name" in original_event:
+                attributes |= {original_event["name"]:''}
             strings.extend(strs)
             attributes |= attrs
 
@@ -303,6 +315,8 @@ def parse_map_events(original_data, translated_data, no_rare_codes, stop_words, 
                                 translated_data['events']) else None
                             strs, attrs = parse_pages(original_event, translated_event, no_rare_codes,
                                                       stop_words, merge_lines)
+                            if ADD_EVENT_NAMES and "name" in original_event:
+                                attributes |= {original_event["name"]: translated_event["name"]}
                             strings.extend(strs)
                             attributes |= attrs
                 elif tag == 'insert':
@@ -312,6 +326,8 @@ def parse_map_events(original_data, translated_data, no_rare_codes, stop_words, 
                             translated_data['events']) else None
                         strs, attrs = parse_pages(translated_event, None, no_rare_codes,
                                                   stop_words, merge_lines)
+                        if ADD_EVENT_NAMES and "name" in translated_event:
+                            attributes |= {translated_event["name"]: ''}
                         strings.extend(strs)
                         attributes |= attrs
         else:
@@ -319,6 +335,8 @@ def parse_map_events(original_data, translated_data, no_rare_codes, stop_words, 
                 if original_event:
                     strs, attrs = parse_pages(original_event, None, no_rare_codes,
                                               stop_words, merge_lines)
+                    if ADD_EVENT_NAMES and "name" in original_event:
+                        attributes |= {original_event["name"]:''}
                     strings.extend(strs)
                     attributes |= attrs
 
@@ -333,7 +351,7 @@ def parse_array_attributes(obj, tr_obj, attrs=[], no_rare_codes=False, dump_all=
                 attributes[obj[i]] = [tr_value, i]
     else:
         for prop in attrs:
-            if no_rare_codes and prop == 'notes': continue
+            if no_rare_codes and prop == 'note': continue
             if prop in obj and obj[prop]:
                 for i, value in enumerate(obj[prop]):
                     if value:
@@ -363,8 +381,10 @@ def parse_attributes(data, tr_data, attrs=[], no_rare_codes=False, is_list=False
                         comment = prop
                         if prop == 'note':
                             if no_rare_codes: continue
-                            if 'name' in obj:
-                                comment += '/' + obj['name']
+                        if 'name' in obj:
+                            comment += '/' + obj['name']
+                        if 'id' in obj:
+                            comment += '/' + obj['id']
                         if prop in obj and obj[prop]:
                             tr_value = tr_obj.get(prop, '') if tr_obj else ''
                             attributes[obj[prop]] = [tr_value, comment]
@@ -375,8 +395,10 @@ def parse_attributes(data, tr_data, attrs=[], no_rare_codes=False, is_list=False
                 comment = prop
                 if prop == 'note':
                     if no_rare_codes: continue
-                    if 'name' in obj:
-                        comment += '/' + obj['name']
+                if 'name' in obj:
+                    comment += '/' + obj['name']
+                if 'id' in obj:
+                    comment += '/' + obj['id']
                 if prop in obj and obj[prop]:
                     attributes[obj[prop]] = ['', comment]
 
@@ -389,7 +411,11 @@ def load_translations(translations_folder):
             if file_name.endswith('.json'):
                 file_path = os.path.join(translations_folder, file_name)
                 with open(file_path, 'r', encoding='utf-8-sig') as file:
-                    translations[file_name] = json.load(file)
+                    try:
+                        translations[file_name] = json.load(file)
+                    except e:
+                        print(f"Error in {file_name}!!\n{e}")
+                        raise
     return translations
 
 def create_csv_files(input_folder, output_folder, no_rare_codes, stop_words, merge_lines, translation_folder):
@@ -425,7 +451,11 @@ def create_csv_files(input_folder, output_folder, no_rare_codes, stop_words, mer
     file_path = os.path.join(input_folder, 'Actors.json')
     if os.path.isfile(file_path):
         with open(file_path, 'r', encoding='utf-8-sig') as file:
-            data = json.load(file)
+            try:
+                data = json.load(file)
+            except e:
+                print(f"Error in {file_name}!!\n{e}")
+                raise
             tr_data = translated_fully.get('Actors.json', [])
             attrs = parse_attributes(
                 data, tr_data,
@@ -443,7 +473,8 @@ def create_csv_files(input_folder, output_folder, no_rare_codes, stop_words, mer
             with open(file_path, 'r', encoding='utf-8-sig') as file:
                 try:
                     data = json.load(file)
-                except:
+                except e:
+                    print(f"Error in {file_name}!!\n{e}")
                     continue
 
             tr_data = translated_fully.get(file_name, {})
