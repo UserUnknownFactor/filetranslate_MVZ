@@ -420,6 +420,10 @@ function csvToArray(text, toDict) {
 		}
 		pletter = letter;
 	}
+	// Filter out unused rows
+	// (comments, detected by `//` not present in the translation, and empty lines)
+	ret = ret.filter(list => typeof list[0] === 'string' && list.length > 1 && 
+			!(list[0].startsWith('//') && !list[1].startsWith('//')));
 	if (toDict)
 		return Object.assign({}, ...ret.map((x) => ({ [x[0]]: x[1] })));
 	return ret;
