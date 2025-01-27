@@ -174,6 +174,8 @@ const setEventList = (eventList, attributesTranslation, stringsTranslation) => {
 
 	const stringsAreArray = Array.isArray(stringsTranslation);
 
+	const sourceSet = stringsAreArray ? new Set(stringsTranslation.map(row => row[0])) : new Set();
+
 	const rpgCode = (code, indent, parameters) => ({ code, indent, parameters });
 
 	const getNextEventCode = (array, nextIndex) => array[nextIndex] && array[nextIndex].code || 0;
@@ -235,7 +237,10 @@ const setEventList = (eventList, attributesTranslation, stringsTranslation) => {
 			let i = codedTexts.length - 1;
 			while (i >= 0 && codedTexts[i] === "") i--;
 			let codedTextsTrimmed = codedTexts.slice(0, i + 1);
-			if (!codedTextsTrimmed.length) return;
+			if (!codedTextsTrimmed.length) {
+				if (count > 1) _index += count - 1;
+				return;
+			}
 
 			const translateLines = (translations, is_list, is_merged=false) => {
 				translations.forEach((text, i) => {
@@ -270,6 +275,14 @@ const setEventList = (eventList, attributesTranslation, stringsTranslation) => {
 				_index += Math.max(codedTextsTrimmed.length, translations.length) - 1;
 			} else if (stringsAreArray && stringsTranslation.length) {
 				// Attempt to find a matching sequence in stringsTranslation
+				const hasCombined = sourceSet.has(combinedText);
+				const hasSeparate = !hasCombined && codedTextsTrimmed.filter(
+						e => !(!e || !e.replace(/(?:^\s+|\s+$)/gm,''))
+					).every(s => sourceSet.has(s));
+				if (!hasCombined && !hasSeparate) {
+					_index += count - 1;
+					return; // don't bother if the strings aren't translated at all
+				}
 				let translationFound = false, merged_lines = false, translationIndex = 0;
 				for (let i = 0; i < stringsTranslation.length; i++) {
 					let match = true;
