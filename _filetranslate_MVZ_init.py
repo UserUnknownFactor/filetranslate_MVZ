@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
-import json, os, re, argparse, difflib
+import json, os, re, argparse, csv, difflib
 from types import NoneType
-from filetranslate.service_fn import read_csv_dict, read_csv_list, write_csv_list
-from filetranslate.language_fn import is_in_language
+from hashlib import sha1
 
 GLOBAL_NAMES = []
 MZ_MODE = not os.path.isdir(".\\www")
 LINE_MERGE_CHARACTER = '' #'\n' # NOTE: set to '\n' to create multiline originals
 ADD_EVENT_NAMES = False # NOTE: usually this is not needed, so JIC
 REMOVE_TL_LINEBREAKS = ' ' # NOTE: set this to None to keep TL linebreaks as is
+TRY_FIND_SIMILAR = True # search translations for slightly changed originals; super slow with a lot of such strings
 
 MZ_PLUGIN_DATA = {
 #   "Plugin name": {"Command name": "Name of the argument with text to be replaced"}
@@ -16,6 +16,115 @@ MZ_PLUGIN_DATA = {
     "DestinationWindow": {"SET_DESTINATION": "destination"},
     "TorigoyaMZ_NotifyMessage": {"notify": "message", "notifyWithVariableIcon": "message"}
 }
+
+RPGM_LIKELY_TAGS = re.compile(r"(?:^【[^】]+】)|<[^>]+>|\\{1,2}(?:[\.!a-zA-Z{}]{1,3}\[[^\]]+\]\]?|>\s+|>(?!\s+)|(?:\b[<\^\|\.n\{\}]+\b))|[※↑↓■□▼◆○●★☆♥♡♪❤〇「」『』「」【】]+|[ \t]{2,}|%\d+|\\{1,2}[\w\.\*!\|}{]|\[[^\]]+\]")
+TAGS_FILENAME = ".\\replacement_tags.csv"
+
+
+# filetranslate functions to remove the dependency
+
+ALL_JPN_RE= re.compile(r'[\u3041-\u3096]|[\u30A0-\u30FF]|[\u3400-\u4DB5\u4E00-\u9FCB\uF900-\uFA6A]|[\u2E80-\u2FD5]|[\uFF5F-\uFF9F]|[\u3000-\u303F]|[\u31F0-\u31FF\u3220-\u3243\u3280-\u337F]|[\uFF01-\uFF5E]|[\u2026-\u203B]', re.U)
+ALL_EN_RE = re.compile('^[\na-zA-Z0-9.,!?;:\"\'-=+()*&%$#@ ]+', re.U)
+EN_LETTERS_RE = re.compile('[a-zA-Z]', re.U)
+def is_in_language(text: str, lang: str, check_all:bool = False) -> bool:
+    """ Checks if string contains a text with the selected language."""
+    if lang == "JA" or lang == "JA_ALL": # Japanese
+        return ALL_JPN_RE.search(text) is not None
+    elif lang == "EN" or lang == "EN_ALL": # English
+        if check_all:
+            return ALL_EN_RE.search(text) is not None
+        else:
+            return EN_LETTERS_RE.search(text) is not None
+    elif not lang or "ANY" in lang or "SKIP" in lang:
+        return True
+    return False
+
+DELIMITER_CHAR = '→'
+ESCAPE_CHAR = '¶'
+USE_CR_REPLACER = False
+CARRIAGE_RETURN_REPLACER = '\u2592'
+CARRIAGE_RETURN = '\x0D'
+CSV_ENCODING = "utf-8-sig"
+DIALECT_TRANSLATION = "translation"
+csv.register_dialect(DIALECT_TRANSLATION, delimiter=DELIMITER_CHAR, quotechar="\uffff", quoting=csv.QUOTE_NONE, escapechar=ESCAPE_CHAR, lineterminator='\n')
+
+def preprocess_in(lines, replace_cr):
+    for line in lines:
+        if replace_cr:
+            yield line.replace(CARRIAGE_RETURN, CARRIAGE_RETURN_REPLACER)
+        else:
+            yield line
+
+def preprocess_out(lst, replace_cr):
+    for row in lst:
+        if replace_cr:
+            yield [(col.replace(CARRIAGE_RETURN_REPLACER, CARRIAGE_RETURN) if isinstance(col, str) else col) for col in row]
+        else:
+            yield row
+
+def read_csv_list(fn, ftype=DIALECT_TRANSLATION, replace_cr=USE_CR_REPLACER):
+    """ Reads CSV array in a->b->... format """
+    if os.path.isfile(fn):
+        with open(fn, 'r', newline='', encoding=CSV_ENCODING) as f:
+            return list(x for x in csv.reader(preprocess_in(f, replace_cr), dialect=ftype) if len(x) > 0)
+    else:
+        return list()
+
+def write_csv_list(fn, lst, ftype=DIALECT_TRANSLATION, replace_cr=USE_CR_REPLACER):
+    """ Writes CSV array in a->b->... format """
+    if not lst or len(lst) == 0: return
+    with open(fn, 'w', newline='', encoding=CSV_ENCODING) as f:
+        writer = csv.writer(f, dialect=ftype)
+        for row in preprocess_out(lst, replace_cr):
+            writer.writerow(row)
+
+def read_csv_dict(fn, ftype=DIALECT_TRANSLATION, replace_cr=USE_CR_REPLACER):
+    """ Reads CSV dictionary in a->b format """
+    if os.path.isfile(fn):
+        with open(fn, 'r', newline='', encoding=CSV_ENCODING) as f:
+            # the function will ignore columns after second
+            return {item[0]: item[1] for item in csv.reader(preprocess_in(f, replace_cr), dialect=ftype) if len(item) > 1}
+    else:
+        return dict()
+
+def tag_hash(string, str_enc="utf-8", hash_len=7, use_digits=False, lang='JA'):
+    """ Generates short English tags for MTL from any kind of string.
+    """
+    if len(string) < 1: return ''
+    d = sha1(string.encode(str_enc)).digest()
+    s = ''
+    n_chars = 26 + (10 if use_digits else 0)
+    # when MTL doesn't understand mixed text offer full-width tags
+    #a_letter = ord('ａ' if lang == 'JA' else 'a')
+    a_letter = ord('a')
+    capA_letter = ord(chr(a_letter).upper())
+    for i in range(0, hash_len):
+        x = d[i] % n_chars
+        if n_chars == 26:
+            s += chr(a_letter + x) # lowercase letters, n_chars = 26
+        elif n_chars == 26 + 10:
+            if x >= 26:
+                s += chr(a_letter - 49 + x - 26) # numbers, n_chars = 36
+            else:
+                s += chr(a_letter + x) # lowercase, n_chars = 36
+        elif n_chars == 26 + 26: # unused since MTLs mess capitalization in JP->EN mode
+            s += (chr(capA_letter + x - 26) if x >= 26 else chr(a_letter + x)) # all letters, n_chars = 52
+        #else:
+            #s += chr(int(random() * 26))
+
+    #endchar = '、' if lang == 'JA' else ','
+    endchar = ','
+    # indentation and endline checks
+    if re.search(r"\A(?:\/\/)?(?:\t+|\A[\u0020\u3000]{2,})", string):
+        #endchar = '：' if lang == 'JA' else ':'
+        endchar = ':'
+    elif re.search(r"\.\s*$", string):
+        #endchar = '！' if lang == 'JA' else '!'
+        endchar = '!'
+    return s + endchar
+
+
+# utility functions
 
 DIGIT_CLEANUP = str.maketrans('', '', '-,.')
 def looks_digit(s):
@@ -26,19 +135,19 @@ def levenshtein_distance(str1, str2):
     m = len(str1)
     n = len(str2)
     dp = [[0 for _ in range(n + 1)] for _ in range(m + 1)]
- 
+
     for i in range(m + 1):
         dp[i][0] = i
     for j in range(n + 1):
         dp[0][j] = j
- 
+
     for i in range(1, m + 1):
         for j in range(1, n + 1):
             if str1[i - 1] == str2[j - 1]:
                 dp[i][j] = dp[i - 1][j - 1]
             else:
                 dp[i][j] = 1 + min(dp[i][j - 1], dp[i - 1][j], dp[i - 1][j - 1])
- 
+
     return dp[m][n]
 
 def similarity_score(s1, s2):
@@ -54,6 +163,9 @@ def extract_quoted_strings(script_text):
     extracted_text = list(filter(lambda a: is_in_language(a, 'JA'), extracted_text))
     return extracted_text
 
+
+# main processing functions
+
 def get_next_code(command_list, i):
     return None if i+1 >= len(command_list) else command_list[i+1]['code']
 
@@ -61,7 +173,7 @@ def parse_codes(original_page, translated_page, name, no_rare_codes, stop_words,
     text_entries = []
     attributes = {}
     has_original = 'list' in original_page
-    has_translation = 'list' in translated_page if translated_page else False
+    has_compare_translation = 'list' in translated_page if translated_page else False
     parsed_codes = (101, 102, 108, 122, 355, 356, 357, 401, 405, 408)
 
     def get_full_text(command_list, start_index):
@@ -72,7 +184,7 @@ def parse_codes(original_page, translated_page, name, no_rare_codes, stop_words,
             i += 1
         return full_text, i
 
-    if has_original and has_translation:
+    if has_original and has_compare_translation:
         def command_to_hashable(command):
             return (command['code'], tuple([p for p in command['parameters'] if isinstance(
                 p, (str, int, NoneType))]) if command['code'] not in parsed_codes else ())
@@ -86,7 +198,7 @@ def parse_codes(original_page, translated_page, name, no_rare_codes, stop_words,
 
     if has_original:
         command_list = original_page['list']
-        tr_command_list = translated_page.get('list', []) if has_translation else []
+        tr_command_list = translated_page.get('list', []) if has_compare_translation else []
         i = 0
         while i < len(command_list):
             command = command_list[i]
@@ -99,7 +211,7 @@ def parse_codes(original_page, translated_page, name, no_rare_codes, stop_words,
             params = command['parameters']
             tr_params = None
 
-            if has_translation:
+            if has_compare_translation:
                 for tag, i1, i2, j1, j2 in sm.get_opcodes():
                     if i1 <= i < i2:
                         if tag in ('replace', 'equal'):
@@ -128,7 +240,7 @@ def parse_codes(original_page, translated_page, name, no_rare_codes, stop_words,
                             attributes[s] = tr_s
             elif code in (401, 405):  # Text data
                 current_lines, end_index = get_full_text(command_list, i)
-                if has_translation and tr_params:
+                if has_compare_translation and tr_params:
                     tr_current_lines, _ = get_full_text(tr_command_list, tr_index)
                 else:
                     tr_current_lines = [''] * len(current_lines)
@@ -147,7 +259,7 @@ def parse_codes(original_page, translated_page, name, no_rare_codes, stop_words,
                             if REMOVE_TL_LINEBREAKS is not None:
                                 tr_current_line = tr_current_line.replace('\n', REMOVE_TL_LINEBREAKS)
                             text_entries.append([current_line, tr_current_line, global_name])
-                    i += len(current_lines) - 1
+                    i += len(current_lines)
                 continue
             elif code == 355:  # Script code
                 if no_rare_codes:
@@ -382,9 +494,9 @@ def parse_attributes(data, tr_data, attrs=[], no_rare_codes=False, is_list=False
                         if prop == 'note':
                             if no_rare_codes: continue
                         if 'name' in obj:
-                            comment += '/' + obj['name']
+                            comment += f"/{obj['name']}"
                         if 'id' in obj:
-                            comment += '/' + obj['id']
+                            comment += f"/{obj['id']}"
                         if prop in obj and obj[prop]:
                             tr_value = tr_obj.get(prop, '') if tr_obj else ''
                             attributes[obj[prop]] = [tr_value, comment]
@@ -396,9 +508,9 @@ def parse_attributes(data, tr_data, attrs=[], no_rare_codes=False, is_list=False
                 if prop == 'note':
                     if no_rare_codes: continue
                 if 'name' in obj:
-                    comment += '/' + obj['name']
+                    comment += f"/{obj['name']}"
                 if 'id' in obj:
-                    comment += '/' + obj['id']
+                    comment += f"/{obj['id']}"
                 if prop in obj and obj[prop]:
                     attributes[obj[prop]] = ['', comment]
 
@@ -418,8 +530,10 @@ def load_translations(translations_folder):
                         raise
     return translations
 
-def create_csv_files(input_folder, output_folder, no_rare_codes, stop_words, merge_lines, translation_folder):
+def create_csv_files(input_folder, output_folder, no_rare_codes, stop_words, 
+                     merge_lines, translation_folder, find_changed_sources):
     pretranslated_dict = {}
+    string_tags = {}
     global GLOBAL_NAMES
 
     def write_attributes(name, data, pretranslated_dict):
@@ -521,35 +635,52 @@ def create_csv_files(input_folder, output_folder, no_rare_codes, stop_words, mer
                         strs[i][1] = pretranslated_dict[row[0]]
 
                 strs_old = read_csv_list(csv_path) # read the old existing string translation
+                strs_old_set = set(s[0] for s in strs_old)
                 for i, row_i in enumerate(strs):
+                    for tag in RPGM_LIKELY_TAGS.findall(row_i[0]):
+                        if tag not in string_tags:
+                            string_tags[tag] = tag_hash(tag)
+                    if row_i[0] not in strs_old_set: continue
                     for j, row_j in enumerate(strs_old):
                         if row_i[0] == row_j[0]:
                             strs[i][1] = row_j[1]
                             strs_old.pop(j)
                             break
-                for i, row_i in enumerate(strs):
-                    if not strs[i][1]: 
-                        best_match = None
-                        best_score = 0
-                        best_index = -1
-                        for j, row_j in enumerate(strs_old):
-                            score = similarity_score(row_i[0], row_j[0])
-                            if score > best_score:
-                                best_match = row_j
-                                best_score = score
-                                best_index = j
-                        if best_match and best_score > 80:
-                            strs[i][1] = best_match[1]
-                            strs_old.pop(best_index)
+                if find_changed_sources:
+                    for i, row_i in enumerate(strs):
+                        if not strs[i][1]:
+                            best_match = None
+                            best_score = 0
+                            best_index = -1
+                            for j, row_j in enumerate(strs_old):
+                                score = similarity_score(row_i[0], row_j[0])
+                                if score > best_score:
+                                    best_match = row_j
+                                    best_score = score
+                                    best_index = j
+                            if best_match and best_score > 80:
+                                strs[i][1] = best_match[1]
+                                strs_old.pop(best_index)
 
                 write_csv_list(csv_path, strs)
                 print(f" Created {os.path.relpath(csv_path)} with {len(strs)} strings")
             # Create attributes CSV
             write_attributes(file_name, attrs, pretranslated_dict)
 
+    if len(string_tags) > 0:
+        with open(TAGS_FILENAME, 'w', newline='', encoding=CSV_ENCODING) as f:
+            writer = csv.writer(f, DIALECT_TRANSLATION)
+            # sort tags by length and move tab&space tags first
+            string_tags = list(string_tags.items())
+            string_tags.sort(key=lambda l: (bool(re.search(r"\t| {2,}", l[0])), len(l[0])), reverse=True)
+            for line in string_tags:
+                writer.writerow(line)
+            print(f"Written replacement tags to {os.path.relpath(TAGS_FILENAME)}")
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description='Extract text and attributes for translation from RPG Maker MV data files.')
+        description='Tool to extract text and attributes for translation from RPGMaker MV/MZ JSON data files.')
     parser.add_argument('-i', '--input-folder', default=(
                         '.\\data' if MZ_MODE else '.\\www\\data'),
                         help='folder containing RPG Maker MV JSON data files.')
@@ -558,6 +689,8 @@ def main():
                         help='folder to save the translation CSV files.')
     parser.add_argument('-r', '--rare-codes', action='store_true',
                         help='enable rarely used codes (pollutes texts if unused).')
+    parser.add_argument('-c', '--changed', action='store_true',
+                        help='try to search translations for slightly changed originals (super slow if there are a lot).')
     parser.add_argument('-s', '--stop-words', default='live2d,audiosource',
                         help='comma separated list of exclusion words for text in scripts.')
     parser.add_argument('-p', '--preserve-lines', action='store_true',
@@ -573,7 +706,7 @@ def main():
 
     stop_words = [w.strip() for w in args.stop_words.split(',') if w] if args.stop_words else []
     create_csv_files(args.input_folder, args.output_folder, not args.rare_codes, stop_words,
-                     not args.preserve_lines, args.translations_folder)
+                     not args.preserve_lines, args.translations_folder, TRY_FIND_SIMILAR or args.changed)
     print(f'Translation files have been created in {args.output_folder}')
 
 if __name__ == "__main__":

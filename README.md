@@ -36,4 +36,4 @@ Add this line to `[www\]js\plugins.js` file before the last `];` :
 
  `_filetranslate_MVZ_init.py` generates all necessary DSV databases when run from the same directory as the Game.exe.
  
- The tool depends on the installed `filetranslate` [module](https://github.com/UserUnknownFactor/filetranslate).
+ The format is compatible with `filetranslate` [translation tool](https://github.com/UserUnknownFactor/filetranslate).

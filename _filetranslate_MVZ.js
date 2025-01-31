@@ -512,7 +512,7 @@ DataManager.loadDataFile = function (name, src) {
 				setTroops(data, attributes);
 			} else if (src.includes("Events")) {
 				if (merged_strings || !fs.existsSync(MV_MODE ? "www/" + str_fname : str_fname)) {
-					setEvents(data, merged_strings, merged_attrs);
+					setEvents(data, attributes, merged_strings);
 				} else {
 					const strCallback = function (text) {
 						setEvents(data, attributes, csvToArray(text, false));
@@ -524,7 +524,7 @@ DataManager.loadDataFile = function (name, src) {
 				}
 			} else if (/Map\d+/.test(src)) {
 				if (merged_strings || !fs.existsSync(MV_MODE ? "www/" + str_fname : str_fname)) {
-					setMapEvents(data, merged_strings, merged_attrs);
+					setMapEvents(data, attributes, merged_strings);
 				} else {
 					const strCallback = function (text) {
 						setMapEvents(data, attributes, csvToArray(text, false));
