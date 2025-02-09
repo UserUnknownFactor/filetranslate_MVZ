@@ -2,13 +2,17 @@
 
 ### Plugin for translation of game texts from plain text DSV databases
 
-This RPG Maker MV/MZ plugin uses either a combined translation dictionary from `data/_combined.csv`, which uses `\n` as a replacement for newlines, or separate translations for each attribute and separate text line of data JSON from `data/{JSON name without extension}_{strings|attributes}.csv`, both with `source→translation[→context]` arrow separated format.
+This RPG Maker MV/MZ plugin uses either a combined translation dictionary from `data/_combined[_languagecode].csv`, which uses `\n` as a replacement for newlines, or separate translations for each attribute and separate text line of data JSON from `data/{JSON name without extension}[_languagecode]_{strings|attributes}.csv`, both with `source→translation[→context]` arrow separated format.
 
-*NOTES*: 
-* Arrows (`→`), newlines and the escape character itself can be escaped with `¶` character.
-* Rows can be commented out by placing `//` before their original (this is ignored if the translation also starts with `//`).
+If you want to translate images, just add their *unencrypted* translations to the `translated[_languagecode]` subdirectory in the same directory as the original image. Without [_languagecode] it'll be the default translation (English).
 
-If you want to translate images, just add their unencrypted translations to the `translated` subdirectory of the same directory as the original image.
+The language configuration option appears in Options menu. 
+
+*NOTES*:  
+* Arrows (`→`), newlines and the escape character itself can be escaped with `¶` character.  
+* Rows can be commented out by placing `//` before their original (ignored if the translation starts with `//` too).  
+* `_languagecode` is a 2-letter standard ISO code preceded by an underscore; currently only English (empty code) and Japanese (`_jp` code) are supported. Since the Python tool now creates only code-less files, the `_jp` code is considered the default language/untranslated.    
+* To add a new, for example: `_ab` language, add it to `LANGUAGE_MAPPING` object, or to `Languages Data` plugin parameter, with `flagY` as y-coordinate anywhere within the desired flag in the `country_flags_32.png` spritesheet, and then put translated images in `translated_ab` and use csv files with the language code in them like `filename_ab_{strings|attributes}.csv` as described above.
 
 #### Plugin parameters:  
 
@@ -24,6 +28,21 @@ If you want to translate images, just add their unencrypted translations to the 
     Default: `''` (empty string)  
 * `Merged Translations`: Specifies where to search for a merged translations dictionary.  
     * `<relative path>` Relative path to the file without `www`. If it's found per-origin .csv files will be ignored.  
+* `Default Language`: Specifies the default menu and translation language.  
+    * `_<two-letter language code>` The code must be prepended with underscore.  
+    Default: `''` (empty string)  
+* `Ignored Characters`: Characters that cannot appear at the beginning of a line during word-wrapping.
+    * `<string>` See its default value in the code.  
+* `Text Margin`: Margin on the both sides of the message window during word-wrapping. If face image shown only right one is used.  
+    Default: `10`  
+* `Enable Wordwrap`: Allows the message window text to be wrapped within the visible area of the dialog box.  
+     * `true` Enable simple word-wrapping (recommended for English).  
+     * `false` Use no or external word-wrapper.   
+* `Override Font Sizes`: Allows font size overriding based on corresponding Languages Data fields.  
+     * `true` Override font sizes if there is a corresponding field filled.  
+     * `false` Disable the entire functionality.
+* `Languages Data`: Supported languages and their icons in the spritesheet object.  
+    * `<JSON-encoded object>` See the object format in the code. 
 
 #### Manual adding of the plugin:
 
