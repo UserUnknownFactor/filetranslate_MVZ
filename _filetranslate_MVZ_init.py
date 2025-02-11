@@ -174,12 +174,12 @@ def parse_codes(original_page, translated_page, name, no_rare_codes, stop_words,
     attributes = {}
     has_original = 'list' in original_page
     has_compare_translation = 'list' in translated_page if translated_page else False
-    parsed_codes = (101, 102, 108, 122, 355, 356, 357, 401, 405, 408)
+    parsed_codes = (101, 102, 108, 122, 355, 356, 357, 401, 405, 408, 655)
 
-    def get_full_text(command_list, start_index):
+    def get_full_text(command_list, start_index, next_codes=(401, 405)):
         full_text = [command_list[start_index]['parameters'][0]]
         i = start_index + 1
-        while i < len(command_list) and command_list[i]['code'] in (401, 405):
+        while i < len(command_list) and command_list[i]['code'] in next_codes:
             full_text.append(command_list[i]['parameters'][0])
             i += 1
         return full_text, i
@@ -261,7 +261,7 @@ def parse_codes(original_page, translated_page, name, no_rare_codes, stop_words,
                             text_entries.append([current_line, tr_current_line, global_name])
                     i += len(current_lines)
                 continue
-            elif code == 355:  # Script code
+            elif code in (355, 655):  # Script code
                 if no_rare_codes:
                     i += 1
                     continue
@@ -530,7 +530,7 @@ def load_translations(translations_folder):
                         raise
     return translations
 
-def create_csv_files(input_folder, output_folder, no_rare_codes, stop_words, 
+def create_csv_files(input_folder, output_folder, no_rare_codes, stop_words,
                      merge_lines, translation_folder, find_changed_sources):
     pretranslated_dict = {}
     string_tags = {}

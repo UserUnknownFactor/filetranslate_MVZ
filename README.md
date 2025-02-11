@@ -1,8 +1,8 @@
-﻿## filetranslate RPG Maker MV/MZ plugin
+﻿## filetranslate MV/MZ game translation plugin
 
-### Plugin for translation of game texts from plain text DSV databases
+### Plugin for translation of RPG Maker MV/MZ game texts from plain-text DSV databases
 
-This RPG Maker MV/MZ plugin uses either a combined translation dictionary from `data/_combined[_languagecode].csv`, which uses `\n` as a replacement for newlines, or separate translations for each attribute and separate text line of data JSON from `data/{JSON name without extension}[_languagecode]_{strings|attributes}.csv`, both with `source→translation[→context]` arrow separated format.
+This plugin uses either a combined translation dictionary from `data/_combined[_languagecode].csv`, which uses `\n` as a replacement for newlines, or separate translations for each attribute and separate text line of data JSON from `data/{JSON name without extension}[_languagecode]_{strings|attributes}.csv`, both with `source→translation[→context]` arrow separated format.
 
 If you want to translate images, just add their *unencrypted* translations to the `translated[_languagecode]` subdirectory in the same directory as the original image. Without [_languagecode] it'll be the default translation (English).
 

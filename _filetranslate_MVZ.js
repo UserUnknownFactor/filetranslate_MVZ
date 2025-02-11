@@ -1,5 +1,5 @@
 ﻿//=============================================================================
-// _filetranslate_MV.js
+// _filetranslate_MVZ.js
 //=============================================================================
 /*:
  * @plugindesc Plugin for automatic translation of game texts.
@@ -107,9 +107,9 @@ const NO_SPACES_FOR_PLUGINS = getBoolean(parameters["Replace Attribute Spaces"] 
 const LINE_MERGE_CHARACTER = String(parameters["Line-merge Character"] || '');
 const MERGED_TRANSLATION_PATH = String(parameters["Merged Translations"] || "data/_combined");
 const DEFAULT_LANGUAGE = parameters["Default Language"] ? `${parameters["defaultLanguage"]}` : '';
-const MARGIN = Number(parameters['Text Margin'] || 10);
-const IGNORE_CHARS = String(parameters['Ignored Characters'] || "♥♡♪;”’!！?？)）〕]］｝」』＞》】,，、.．。　"); // at start; (（〔［｛「『＜《【"} at end;
-const ENABLE_WORDWRAP = getBoolean(parameters['Enable Wordwrap'] || "true");
+const MARGIN = Number(parameters["Text Margin"] || 10);
+const IGNORE_CHARS = String(parameters["Ignored Characters"] || "♥♡♪;”’!！?？)）〕]］｝」』＞》】,，、.．。　"); // at start; (（〔［｛「『＜《【"} at end;
+const ENABLE_WORDWRAP = getBoolean(parameters["Enable Wordwrap"] || "true");
 const OVERRIDE_FONTS = getBoolean(parameters["Override Font Sizes"] || "false");;
 const LANGUAGE_MAPPING = parameters["Languages Data"] ? JSON.parse(parameters["Languages Data"]) : {
 	// BFS: battle font size; message font size; HFS: help font size (deafult: 28)
@@ -387,6 +387,7 @@ const setMapEvents = ((data, attributesTranslation, stringsTranslation) => {
 	});
 });
 
+
 const setEventList = (eventList, attributesTranslation, stringsTranslation) => {
 	if (!attributesTranslation && !stringsTranslation) return;
 
@@ -477,7 +478,9 @@ const setEventList = (eventList, attributesTranslation, stringsTranslation) => {
 				});
 				if (is_merged) {
 					// reset all following text lines if we merged them beforehand
+					// NOTE: 999 code should be ignored, but this seems unstable...
 					for (let i = 1; i < codedTexts.length; i++)
+						//eventList[_index + i].code = 999;
 						eventList[_index + i].parameters[0] = '';
 				}
 			}
@@ -495,7 +498,7 @@ const setEventList = (eventList, attributesTranslation, stringsTranslation) => {
 				// Attempt to find a matching sequence in stringsTranslation
 				const hasCombined = sourceSet.has(combinedText);
 				const hasSeparate = !hasCombined && codedTextsTrimmed.filter(
-						e => !(!e || !e.replace(/(?:^\s+|\s+$)/gm,''))
+						e => !(!e || !e.replace(/(?:^\s+|\s+$)/gm, ''))
 					).every(s => sourceSet.has(s));
 				if (!hasCombined && !hasSeparate) {
 					_index += count - 1;
@@ -787,29 +790,29 @@ if (OVERRIDE_FONTS) {
 				return originalMethod.call(this);
 			};
 		}
-		wrapStandardFontSize(Window_Message, 'MFS');  // Dialog messages
+		wrapStandardFontSize(Window_Message, "MFS");  // Dialog messages
 
 		// Battle-related
-		wrapStandardFontSize(Window_BattleLog, 'BFS');     // Battle messages
-		wrapStandardFontSize(Window_BattleStatus, 'BSS');  // Party status in battle
-		wrapStandardFontSize(Window_BattleActor, 'BAS');   // Actor selection
-		wrapStandardFontSize(Window_BattleEnemy, 'BES');   // Enemy selection
-		wrapStandardFontSize(Window_BattleSkill, 'BSK');   // Skill selection
-		wrapStandardFontSize(Window_BattleItem, 'BIS');    // Item selection
+		wrapStandardFontSize(Window_BattleLog, "BFS");     // Battle messages
+		wrapStandardFontSize(Window_BattleStatus, "BSS");  // Party status in battle
+		wrapStandardFontSize(Window_BattleActor, "BAS");   // Actor selection
+		wrapStandardFontSize(Window_BattleEnemy, "BES");   // Enemy selection
+		wrapStandardFontSize(Window_BattleSkill, "BSK");   // Skill selection
+		wrapStandardFontSize(Window_BattleItem, "BIS");    // Item selection
 
 		// Menu-related
-		wrapStandardFontSize(Window_Help, 'HFS');         // Help/description text
-		wrapStandardFontSize(Window_MenuStatus, 'MSS');   // Party status in menu
-		wrapStandardFontSize(Window_Status, 'STS');       // Status screen
-		wrapStandardFontSize(Window_ItemList, 'ILS');     // Item list
-		wrapStandardFontSize(Window_SkillList, 'SLS');    // Skill list
-		wrapStandardFontSize(Window_EquipStatus, 'EQS');  // Equipment status
-		wrapStandardFontSize(Window_ShopBuy, 'SBS');      // Shop buy window
-		wrapStandardFontSize(Window_ShopSell, 'SSS');     // Shop sell window
-		wrapStandardFontSize(Window_NameInput, 'NIS');    // Name input
-		wrapStandardFontSize(Window_Options, 'OPS');      // Options menu
-		wrapStandardFontSize(Window_SavefileList, 'SFL'); // Save-file list
-		wrapStandardFontSize(Window_GameEnd, 'GES');      // Game quit menu
+		wrapStandardFontSize(Window_Help, "HFS");         // Help/description text
+		wrapStandardFontSize(Window_MenuStatus, "MSS");   // Party status in menu
+		wrapStandardFontSize(Window_Status, "STS");       // Status screen
+		wrapStandardFontSize(Window_ItemList, "ILS");     // Item list
+		wrapStandardFontSize(Window_SkillList, "SLS");    // Skill list
+		wrapStandardFontSize(Window_EquipStatus, "EQS");  // Equipment status
+		wrapStandardFontSize(Window_ShopBuy, "SBS");      // Shop buy window
+		wrapStandardFontSize(Window_ShopSell, "SSS");     // Shop sell window
+		wrapStandardFontSize(Window_NameInput, "NIS");    // Name input
+		wrapStandardFontSize(Window_Options, "OPS");      // Options menu
+		wrapStandardFontSize(Window_SavefileList, "SFL"); // Save-file list
+		wrapStandardFontSize(Window_GameEnd, "GES");      // Game quit menu
 	} else { // MZ
 		function wrapResetFontSettings(windowClass, fontSizeKey) {
 			const originalMethod = windowClass.prototype.resetFontSettings;
@@ -820,27 +823,27 @@ if (OVERRIDE_FONTS) {
 					this.contents.fontSize = fontSize;
 			};
 		}
-		wrapResetFontSettings(Window_Message, 'MFS');
+		wrapResetFontSettings(Window_Message, "MFS");
 
-		wrapResetFontSettings(Window_BattleLog, 'BFS');
-		wrapResetFontSettings(Window_BattleStatus, 'BSS');
-		wrapResetFontSettings(Window_BattleActor, 'BAS');
-		wrapResetFontSettings(Window_BattleEnemy, 'BES');
-		wrapResetFontSettings(Window_BattleSkill, 'BSK');
-		wrapResetFontSettings(Window_BattleItem, 'BIS');
+		wrapResetFontSettings(Window_BattleLog, "BFS");
+		wrapResetFontSettings(Window_BattleStatus, "BSS");
+		wrapResetFontSettings(Window_BattleActor, "BAS");
+		wrapResetFontSettings(Window_BattleEnemy, "BES");
+		wrapResetFontSettings(Window_BattleSkill, "BSK");
+		wrapResetFontSettings(Window_BattleItem, "BIS");
 
-		wrapResetFontSettings(Window_Help, 'HFS');
-		wrapResetFontSettings(Window_MenuStatus, 'MSS');
-		wrapResetFontSettings(Window_Status, 'STS');
-		wrapResetFontSettings(Window_ItemList, 'ILS');
-		wrapResetFontSettings(Window_SkillList, 'SLS');
-		wrapResetFontSettings(Window_EquipStatus, 'EQS');
-		wrapResetFontSettings(Window_ShopBuy, 'SBS');
-		wrapResetFontSettings(Window_ShopSell, 'SSS');
-		wrapResetFontSettings(Window_NameInput, 'NIS');
-		wrapResetFontSettings(Window_Options, 'OPS');
-		wrapResetFontSettings(Window_SavefileList, 'SFL');
-		wrapResetFontSettings(Window_GameEnd, 'GES');
+		wrapResetFontSettings(Window_Help, "HFS");
+		wrapResetFontSettings(Window_MenuStatus, "MSS");
+		wrapResetFontSettings(Window_Status, "STS");
+		wrapResetFontSettings(Window_ItemList, "ILS");
+		wrapResetFontSettings(Window_SkillList, "SLS");
+		wrapResetFontSettings(Window_EquipStatus, "EQS");
+		wrapResetFontSettings(Window_ShopBuy, "SBS");
+		wrapResetFontSettings(Window_ShopSell, "SSS");
+		wrapResetFontSettings(Window_NameInput, "NIS");
+		wrapResetFontSettings(Window_Options, "OPS");
+		wrapResetFontSettings(Window_SavefileList, "SFL");
+		wrapResetFontSettings(Window_GameEnd, "GES");
 	}
 }
 
@@ -858,33 +861,59 @@ if (ENABLE_WORDWRAP) {
 		const _needsNewPage = Window_Message.prototype.needsNewPage;
 
 		//Game_Message.prototype.allText = function() {
+			//NOTE: alternative approach to isEndOfText checks
 			//return this._texts.join('\n').trim();
 		//};
 
-	Window_Message.prototype.isEndOfText = function(textState) {
-		// avoid new empty message if the current one is at max lines and ending in \n
-		if (textState.index >= textState.text.length - 4) {
+		// these chars shouldn't be at the start of new line and end of last
+		const messageEnders = [' ', '\n'];
+		// keep the follwing messages one space right if they start with this:
+		const openChars = ['(', '[', '*'];
+		const closeChars = [')', ']', '*'];
+
+		Window_Message.prototype.isEndOfText = function(textState) {
+			// avoid new empty box if the current one is at max lines and ending in \n-s
 			let index = textState.index;
-			const enders = [' ', '\n'];
-			while (index < textState.text.length && enders.contains(textState.text[index]))
-				index++;
-			return index >= textState.text.length;
-		}
-		return textState.index >= textState.text.length;
-	};
+			const len = textState.text.length;
+			if (index >= len - 4) {
+				while (index < len && messageEnders.contains(textState.text[index]))
+					index++;
+				return index >= len;
+			}
+			return false;
+		};
+
+		let g_keepSpaces = false;
+		let g_openCharIndex = -1;
 
 		Window_Message.prototype.processCharacter = function(textState) {
+			const isStartOfLine = () => textState.x === this.newLineX();
+			if (textState.index === 0) {
+				g_keepSpaces = false;
+				g_openCharIndex = -1;
+			}
+			if (isStartOfLine() && g_openCharIndex === -1) {
+				g_openCharIndex = openChars.indexOf(textState.text[0]);
+				if (g_openCharIndex !== -1)
+					g_keepSpaces = true;
+			}
+			if (g_keepSpaces && textState.text[textState.index] === closeChars[g_openCharIndex]) {
+				g_keepSpaces = false;
+				g_openCharIndex = -1;
+			}
 			if (this.needsNewLine(textState)) {
 				const currentChar = textState.text[textState.index];
 				this.processNewLine(textState);
-				if (currentChar !== ' ')
+				if (!messageEnders.contains(currentChar) || (g_keepSpaces && isStartOfLine()))
 					textState.index--;
 			}
+
 			if (_needsNewPage.call(this, textState))
 				textState.index--;
 
 			_processCharacter.call(this, textState);
 		};
+
 
 	} else {
 		const _Window_Message_shouldBreakHere = Window_Message.prototype.shouldBreakHere;
@@ -905,8 +934,8 @@ if (ENABLE_WORDWRAP) {
 		const currentChar = text[index];
 		const nextChar = text[index + 1];
 
-		// Early return if current character should be ignored
-		if (IGNORE_CHARS.indexOf(currentChar) !== -1 && IGNORE_CHARS.indexOf(nextChar) === -1)
+		// Early return if current character should be ignored or it's pre-wrapped
+		if (nextChar == '\n' || IGNORE_CHARS.indexOf(currentChar) !== -1 && IGNORE_CHARS.indexOf(nextChar) === -1)
 			return false;
 
 		const stringWidth = textState.x + this.textWidth(currentChar);
