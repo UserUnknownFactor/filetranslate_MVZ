@@ -329,21 +329,27 @@ def parse_pages(original_event, translated_event, no_rare_codes, stop_words, mer
                         original_page = original_event['pages'][i]
                         translated_page = translated_event['pages'][i - i1 + j1] if (
                             i - i1 + j1 < len(translated_event['pages'])) else {}
-                        strs, attrs = parse_codes(original_page, translated_page, character_name,
-                                                  no_rare_codes, stop_words, merge_lines)
+                        strs, attrs = parse_codes(
+                            original_page, translated_page, character_name,
+                            no_rare_codes, stop_words, merge_lines
+                        )
                         strings.extend(strs)
                         attributes |= attrs
                 elif tag == 'insert':
                     for j in range(j1, j2):
                         translated_page = translated_event['pages'][j]
-                        strs, attrs = parse_codes(translated_page, [], character_name,
-                                                  no_rare_codes, stop_words, merge_lines)
+                        strs, attrs = parse_codes(
+                            translated_page, [], character_name,
+                            no_rare_codes, stop_words, merge_lines
+                        )
                         strings.extend(strs)
                         attributes |= attrs
         else:
             for original_page in original_event['pages']:
-                strs, attrs = parse_codes(original_page, {}, character_name,
-                                          no_rare_codes, stop_words, merge_lines)
+                strs, attrs = parse_codes(
+                    original_page, {}, character_name,
+                    no_rare_codes, stop_words, merge_lines
+                )
                 strings.extend(strs)
                 attributes |= attrs
 
@@ -377,8 +383,16 @@ def parse_events_list(original_data, translated_data, no_rare_codes, stop_words,
                     original_event = original_data[i]
                     if not original_event: continue
                     translated_event = translated_data[i - i1 + j1] if i - i1 + j1 < len(translated_data) else {}
-                    strs, attrs = parse_codes(original_event, translated_event, original_event['name'],
-                                              no_rare_codes, stop_words, merge_lines)
+                    if "pages" in original_event:
+                        strs, attrs = parse_pages(
+                            original_event, translated_event, 
+                            no_rare_codes, stop_words, merge_lines
+                        )
+                    else:
+                        strs, attrs = parse_codes(
+                            original_event, translated_event, original_event['name'],
+                            no_rare_codes, stop_words, merge_lines
+                        )
                     if ADD_EVENT_NAMES and "name" in original_event:
                         attributes |= {original_event["name"]: translated_event["name"]}
                     strings.extend(strs)
@@ -387,8 +401,16 @@ def parse_events_list(original_data, translated_data, no_rare_codes, stop_words,
                 for j in range(j1, j2):
                     translated_event = translated_data[j] if j < len(translated_data) else {}
                     if not translated_event: continue
-                    strs, attrs = parse_codes(translated_event, [], translated_event['name'], no_rare_codes,
-                                              stop_words, merge_lines)
+                    if "pages" in original_event:
+                        strs, attrs = parse_pages(
+                            original_event, {}, no_rare_codes,
+                            stop_words, merge_lines
+                        )
+                    else:
+                        strs, attrs = parse_codes(
+                            translated_event, {}, translated_event['name'], 
+                            no_rare_codes, stop_words, merge_lines
+                        )
                     strings.extend(strs)
                     if ADD_EVENT_NAMES and "name" in translated_event:
                         attributes |= {translated_event["name"]:''}
@@ -396,8 +418,15 @@ def parse_events_list(original_data, translated_data, no_rare_codes, stop_words,
     else:
         for original_event in original_data:
             if not original_event: continue
-            strs, attrs = parse_codes(original_event, {}, original_event['name'],
-                                      no_rare_codes, stop_words, merge_lines)
+            if "pages" in original_event:
+                strs, attrs = parse_pages(
+                    original_event, {}, no_rare_codes, stop_words, merge_lines
+                )
+            else:
+                strs, attrs = parse_codes(
+                    original_event, {}, original_event['name'],
+                    no_rare_codes, stop_words, merge_lines
+                )
             if ADD_EVENT_NAMES and "name" in original_event:
                 attributes |= {original_event["name"]:''}
             strings.extend(strs)
@@ -405,7 +434,8 @@ def parse_events_list(original_data, translated_data, no_rare_codes, stop_words,
 
     return strings, attributes
 
-def parse_map_events(original_data, translated_data, no_rare_codes, stop_words, merge_lines=False):
+def parse_map_events(
+        original_data, translated_data, no_rare_codes, stop_words, merge_lines=False):
     strings = []
     attributes = {}
 
@@ -616,7 +646,7 @@ def create_csv_files(input_folder, output_folder, no_rare_codes, stop_words,
                     'terms', {}).get('messages', {}), dump_all=True)
             elif "Troops" in file_path:
                 # Troop data
-                _, attrs = parse_events_list(data, tr_data, False, [])
+                strs, attrs = parse_events_list(data, tr_data, False, stop_words, merge_lines)
             elif "Events" in file_path:
                 # Event data
                 strs, attrs = parse_events_list(data, tr_data, no_rare_codes, stop_words, merge_lines)
