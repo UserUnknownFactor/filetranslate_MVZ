@@ -54,5 +54,5 @@ Add this line to `[www\]js\plugins.js` file before the last `];` :
 ### Command line tool
 
  `_filetranslate_MVZ_init.py` generates all necessary DSV databases when run from the same directory as the Game.exe.
- 
+ If you want to retranslate some game based on a previous translation put it in `to_compare` subfolder preserving the directory structure so it'll try to match them.
  The format is compatible with `filetranslate` [translation tool](https://github.com/UserUnknownFactor/filetranslate).
