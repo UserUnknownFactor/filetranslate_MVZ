@@ -112,7 +112,7 @@ const IGNORE_CHARS = String(parameters["Ignored Characters"] || "♥♡♪;”�
 const ENABLE_WORDWRAP = getBoolean(parameters["Enable Wordwrap"] || "true");
 const OVERRIDE_FONTS = getBoolean(parameters["Override Font Sizes"] || "false");;
 const LANGUAGE_MAPPING = parameters["Languages Data"] ? JSON.parse(parameters["Languages Data"]) : {
-	// BFS: battle font size; message font size; HFS: help font size (deafult: 28)
+	// BFS: battle font size; message font size; HFS: help font size (default: 28)
 	// See below for the rest (default: 26)
 	'':  { name: "English", flagY: 2912, buttonText: "Language", BFS: 28,  MFS: 28, HFS: 28 },
 	//"_en": { name: "English", flagX: 0, flagY: 2912, buttonText: "Language" },
@@ -354,11 +354,11 @@ const setObjDataOnSystem = ((data, dataTranslation) => {
 	});
 });
 
-const setTroops = ((data, dataTranslation) => {
-	if (!data || !dataTranslation) return;
+const setTroops = ((data, attributesTranslation, stringsTranslation) => {
+	if (!data || (!attributesTranslation && !stringsTranslation)) return;
 	data.forEach((obj) => {
 		if (obj && obj.pages)
-			setEvents(obj.pages, dataTranslation, null);
+			setEvents(obj.pages, attributesTranslation, stringsTranslation);
 	});
 });
 
@@ -733,7 +733,17 @@ DataManager.loadDataFile = function (name, src) {
 				} else if (src.includes("System")) {
 					setObjDataOnSystem(data, attributes);
 				} else if (src.includes("Troops")) {
-					setTroops(data, attributes);
+					if (merged_strings || !fs.existsSync(MV_MODE ? "www/" + str_fname : str_fname)) {
+						setTroops(data, attributes, merged_strings);
+					} else {
+						const strCallback = function (text) {
+							setTroops(data, attributes, csvToArray(text, false));
+							window[name] = data;
+							DataManager.onLoad(window[name]);
+						}
+						getXHRFile(str_fname, strCallback, () => { strCallback(null); });
+						return;
+					}
 				} else if (src.includes("Events")) {
 					if (merged_strings || !fs.existsSync(MV_MODE ? "www/" + str_fname : str_fname)) {
 						setEvents(data, attributes, merged_strings);
@@ -866,10 +876,12 @@ if (ENABLE_WORDWRAP) {
 		//};
 
 		// these chars shouldn't be at the start of new line and end of last
-		const messageEnders = [' ', '\n'];
+		const messageEnders = [' ', '\u3000', '\n'];
 		// keep the follwing messages one space right if they start with this:
 		const openChars = ['(', '[', '*'];
 		const closeChars = [')', ']', '*'];
+		const openCharsJP = ['「', '『'];
+		const closeCharsJP = ['」', '』'];
 
 		Window_Message.prototype.isEndOfText = function(textState) {
 			// avoid new empty box if the current one is at max lines and ending in \n-s
@@ -884,28 +896,50 @@ if (ENABLE_WORDWRAP) {
 		};
 
 		let g_keepSpaces = false;
+		let g_keepSpacesJP = false;
 		let g_openCharIndex = -1;
 
 		Window_Message.prototype.processCharacter = function(textState) {
 			const isStartOfLine = () => textState.x === this.newLineX();
 			if (textState.index === 0) {
 				g_keepSpaces = false;
+				g_keepSpacesJP = false;
 				g_openCharIndex = -1;
 			}
 			if (isStartOfLine() && g_openCharIndex === -1) {
 				g_openCharIndex = openChars.indexOf(textState.text[0]);
-				if (g_openCharIndex !== -1)
-					g_keepSpaces = true;
+				if (g_openCharIndex !== -1) g_keepSpaces = true;
+				else {
+					g_openCharIndex = openCharsJP.indexOf(textState.text[0]);
+					if (g_openCharIndex !== -1) {
+						g_keepSpacesJP = true;
+					}
+				}
 			}
 			if (g_keepSpaces && textState.text[textState.index] === closeChars[g_openCharIndex]) {
 				g_keepSpaces = false;
 				g_openCharIndex = -1;
+			} else if (g_keepSpacesJP && textState.text[textState.index] === closeCharsJP[g_openCharIndex]) {
+				g_keepSpacesJP = false;
+				g_openCharIndex = -1;
 			}
+			let old_x = textState.x;
 			if (this.needsNewLine(textState)) {
 				const currentChar = textState.text[textState.index];
 				this.processNewLine(textState);
-				if (!messageEnders.contains(currentChar) || (g_keepSpaces && isStartOfLine()))
-					textState.index--;
+				if (!messageEnders.contains(currentChar) || ((g_keepSpaces || g_keepSpacesJP) && isStartOfLine())) {
+					if (g_keepSpacesJP) {
+						// since textState.text is read-only we create a temporary spacer state
+						// then copy textState to preserve the positioning and structure
+						let tempState = Object.assign({}, textState);
+						tempState.text = "\u3000";
+						tempState.index = 0;
+						this.processNormalCharacter(tempState);
+						textState.x = tempState.x;
+						return;
+					} else // in case of a normal space just put the index back on it
+						textState.index--;
+				}
 			}
 
 			if (_needsNewPage.call(this, textState))
