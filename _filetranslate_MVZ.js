@@ -147,7 +147,7 @@ ConfigManager.applyData = function(config) {
 // Add initialization to Window_Options
 const _Window_Options_initialize = Window_Options.prototype.initialize;
 Window_Options.prototype.initialize = function() {
-	_Window_Options_initialize.call(this);
+	_Window_Options_initialize.apply(this, arguments);
 	if (!ConfigManager.language) {
 		ConfigManager.language = DEFAULT_LANGUAGE;
 		ConfigManager.save();
@@ -215,14 +215,16 @@ Window_Options.prototype.onLanguageCancel = function() {
 const _Window_Options_drawItem = Window_Options.prototype.drawItem;
 Window_Options.prototype.drawItem = function(index) {
 	const symbol = this.commandSymbol(index);
-	const rect = this.itemRectForText(index);
+	const rect = MV_MODE ? this.itemRectForText(index) : this.itemRectWithPadding(index);
 
 	if (symbol === "language") {
 		const language = LANGUAGE_MAPPING[ConfigManager.language] || LANGUAGE_MAPPING[''];
-		this.changeTextColor(this.normalColor());
+		 this.changeTextColor(MV_MODE ? this.normalColor() : ColorManager.normalColor());
 		this.drawText(LANGUAGE_MAPPING[ConfigManager.language].buttonText, rect.x, rect.y, rect.width - 40, "left");
-		if (language)
-			this.drawFlagIcon(language.flagX, language.flagY, rect.x + rect.width - 39, rect.y);
+		if (language) {
+			const padding = (rect.height - this.lineHeight());
+			this.drawFlagIcon(language.flagX, language.flagY, rect.x + rect.width - 39, MV_MODE ? rect.y : rect.y + padding);
+		}
 	} else
 		_Window_Options_drawItem.call(this, index);
 };
@@ -237,9 +239,15 @@ Window_LanguageSelection.prototype.constructor = Window_LanguageSelection;
 Window_LanguageSelection.prototype.initialize = function() {
 	const width = 240;
 	const height = this.windowHeight();
-	Window_Command.prototype.initialize.call(this, 0, 0);
-	this.width = width;
-	this.height = height;
+	if (MV_MODE) {
+		Window_Command.prototype.initialize.call(this, 0, 0);
+		this.width = width;
+		this.height = height;
+	} else {
+		const rect = this.itemRect(this.index());
+		rect.width = width; rect.height = height;
+		Window_Command.prototype.initialize.call(this, rect);
+	}
 };
 
 Window_LanguageSelection.prototype.windowHeight = function() {
@@ -254,9 +262,10 @@ Window_LanguageSelection.prototype.makeCommandList = function() {
 };
 
 Window_LanguageSelection.prototype.drawItem = function(index) {
-	const rect = this.itemRectForText(index);
+	const rect = MV_MODE ? this.itemRectForText(index) : this.itemRectWithPadding(index);
 	const language = this._list[index].ext;
-	this.drawFlagIcon(language.flagX, language.flagY, rect.x, rect.y);
+	const padding = (rect.height - this.lineHeight());
+	this.drawFlagIcon(language.flagX, language.flagY, rect.x, MV_MODE ? rect.y : rect.y + padding);
 	this.drawText(this.commandName(index), rect.x + 40, rect.y, rect.width - 40, "left");
 };
 
@@ -537,6 +546,11 @@ const setEventList = (eventList, attributesTranslation, stringsTranslation) => {
 		};
 
 		switch (code) {
+			case 101: // Show text
+				if (IGNORE_RARE.indexOf(code) === -1 && attributesTranslation &&
+						parameters[4] in attributesTranslation && attributesTranslation[parameters[4]])
+					parameters[4] = attributesTranslation[parameters[4]]; // SpeakerName
+				break;
 			case 401: // Text data
 				processTextEvent(code, (event) => event.parameters[0], 4,
 					(indent, params) => rpgCode(101, indent, params), false);
@@ -702,9 +716,26 @@ const	merged_strings = merged,
 		merged_attrs = merged;
 merged = null;
 
+const plugintls = getMergedTranslations(`data/_Plugins${ConfigManager.language}.csv`)
+window._T = function(text) {
+	if (!text) return "";
+	const key = String(text);
+	if (DEBUG) console.log("_T:", key + ":", plugintls[key]);
+	return plugintls[key] ?? key;
+};
+
 //----------------------------------
 // RPG Maker patches
 //----------------------------------
+
+// Switch locale-aware external plugins to the selected language
+const _isDatabaseLoaded = DataManager.isDatabaseLoaded;
+DataManager.isDatabaseLoaded = function() {
+	if (!_isDatabaseLoaded.call(this)) return false;
+	const locale = ConfigManager.language.substring(1);
+	$dataSystem.locale = (locale ? locale : "en") + $dataSystem.locale.substring(2);
+	return true;
+};
 
 // JSON translation wrapper
 DataManager.loadDataFile = function (name, src) {
@@ -861,10 +892,18 @@ if (OVERRIDE_FONTS) {
 if (ENABLE_WORDWRAP) {
 	const _Window_Message_newLineX = Window_Message.prototype.newLineX;
 	Window_Message.prototype.newLineX = function () {
-		let offsetX = _Window_Message_newLineX.call(this);
+		let offsetX = _Window_Message_newLineX.apply(this, arguments);
 		if (offsetX === 0) offsetX += MARGIN;
 		return offsetX;
 	};
+	
+	// these chars shouldn't be at the start of the new line and end of the last
+	const messageEnders = [' ', '\u3000', '\n'];
+	// keep the following lines one matching space right if they start with this:
+	const openChars = ['(', '[', '*'];
+	const closeChars = [')', ']', '*'];
+	const openCharsJP = ['「', '『'];
+	const closeCharsJP = ['」', '』'];
 
 	if (MV_MODE) {
 		const _processCharacter = Window_Base.prototype.processCharacter;
@@ -874,14 +913,6 @@ if (ENABLE_WORDWRAP) {
 			//NOTE: alternative approach to isEndOfText checks
 			//return this._texts.join('\n').trim();
 		//};
-
-		// these chars shouldn't be at the start of new line and end of last
-		const messageEnders = [' ', '\u3000', '\n'];
-		// keep the follwing messages one space right if they start with this:
-		const openChars = ['(', '[', '*'];
-		const closeChars = [')', ']', '*'];
-		const openCharsJP = ['「', '『'];
-		const closeCharsJP = ['」', '』'];
 
 		Window_Message.prototype.isEndOfText = function(textState) {
 			// avoid new empty box if the current one is at max lines and ending in \n-s
@@ -950,15 +981,45 @@ if (ENABLE_WORDWRAP) {
 
 
 	} else {
-		const _Window_Message_shouldBreakHere = Window_Message.prototype.shouldBreakHere;
+		const _shouldBreakHere = Window_Message.prototype.shouldBreakHere;
+	
+		let g_messageTextJP = null;
+		let g_keepSpacesJP = false;
+		let g_openCharIndexJP = -1;
+	
 		Window_Message.prototype.shouldBreakHere = function(textState) {
-			this.flushTextState(textState);
-			if (this.needsNewLine(textState)) {
-				this.processNewLine(textState);
-				if (textState.text[textState.index] === ' ')
-					textState.index++;
+			const text = textState.text;
+	
+			if (text !== g_messageTextJP) {
+				g_messageTextJP = text;
+				g_openCharIndexJP = openCharsJP.indexOf(text[0]);
+				g_keepSpacesJP = g_openCharIndexJP !== -1;
 			}
-			return _Window_Message_shouldBreakHere.call(this, textState);
+	
+			this.flushTextState(textState);
+	
+			if (this.needsNewLine(textState)) {
+				const currentChar = text[textState.index];
+				if (
+					g_keepSpacesJP &&
+					currentChar === closeCharsJP[g_openCharIndexJP]
+				) {
+					g_keepSpacesJP = false;
+					g_openCharIndexJP = -1;
+				}
+	
+				this.processNewLine(textState);
+	
+				if (currentChar === ' ') {
+					textState.index++;
+				} 
+				if (g_keepSpacesJP) {
+					const g_spaceWidth = this.textWidth('\u3000');// - this.textWidth(' ');
+					textState.x += g_spaceWidth;
+				}
+			}
+	
+			return _shouldBreakHere.call(this, textState);
 		};
 	}
 
@@ -1027,6 +1088,7 @@ if (MV_MODE) {
 		this._image.onerror = this._onError.bind(this);
 		this._destroyCanvas();
 		this._loadingState = "loading";
+		let url = this._url;
 
 		const isLangSpritesheet = !!url.contains(LANGUAGES_PNG);
 		const isDisabled = LANGUAGE_MAPPING[ConfigManager.language].disable && !isLangSpritesheet;
